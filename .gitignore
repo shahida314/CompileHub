@@ -1,0 +1,21 @@
+# Node dependencies
+backend/node_modules/
+.env
+
+# VS Code config
+.vscode/
+
+# Local Compiled Binary Outputs across all compiler hubs
+backend/**/*.exe
+backend/**/*.o
+backend/**/*.out
+
+# Flex and Bison runtime generated C files across all hubs
+backend/**/src/lexer/lex.yy.c
+backend/**/src/parser/y.tab.c
+backend/**/src/parser/y.tab.h
+backend/**/src/parser/y.output
+
+# OS overhead files
+.DS_Store
+thumbs.db
