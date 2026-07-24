@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CompileHub - C++ Compiler</title>
+    <link rel="stylesheet" href="cpp_style.css">
+</head>
+
+<body>
+
+    <!-- Top Navigation Header -->
+    <header class="top-bar">
+        <div class="brand">
+            <span class="brand-title">CompileHub</span>
+            <span class="brand-tag">C++</span>
+        </div>
+
+        <!-- Actions -->
+        <div class="header-controls">
+            <button class="btn btn-run" id="runBtn">► Run</button>
+            <button class="btn" id="debugBtn">Debug</button>
+            <button class="btn" id="stopBtn">Stop</button>
+            <button class="btn" id="shareBtn">Share</button>
+            <button class="btn" id="saveBtn">Save</button>
+
+            <!-- Fixed language badge (this page is C++ only) -->
+            <span class="lang-badge">Language: C++</span>
+        </div>
+    </header>
+
+    <!-- Main Code Editor Section -->
+    <main class="editor-container">
+        <div class="line-numbers" id="lineNumbers"></div>
+        <textarea id="codeArea" class="code-area" spellcheck="false"></textarea>
+    </main>
+
+    <!-- Terminal -->
+    <footer class="console-wrapper" id="consoleWrapper">
+        <div class="console-header">
+            <span class="console-title">TERMINAL (Press Ctrl+` to toggle)</span>
+            <div class="console-actions">
+                <button class="console-btn" id="toggleTerminalBtn" title="Minimize/Maximize">─</button>
+                <button class="console-btn" id="closeTerminalBtn" title="Close Panel">✕</button>
+            </div>
+        </div>
+        <div class="console-container" id="consoleOutput">
+            &gt; Initializing console...
+        </div>
+    </footer>
+
+    <script src="cpp_script.js"></script>
+</body>
+
+</html>

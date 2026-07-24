@@ -1,0 +1,205 @@
+/* ===== Color Theme (Navy / Blue / Beige palette) ===== */
+:root {
+    --navy: #111844;
+    --blue: #4B5694;
+    --light-blue: #7288AE;
+    --beige: #EAE0CF;
+
+    --bg-main: var(--navy);
+    --bg-panel: #0c1230;
+    --bg-editor: #0a0e26;
+    --border-color: var(--blue);
+    --text-primary: var(--beige);
+    --text-secondary: var(--light-blue);
+    --accent: var(--light-blue);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Consolas', 'Courier New', monospace;
+    background-color: var(--bg-editor);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ===== Top Bar ===== */
+.top-bar {
+    background-color: var(--bg-main);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    flex-shrink: 0;
+}
+
+.brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.brand-title {
+    font-size: 1.4rem;
+    font-weight: bold;
+    color: var(--beige);
+    letter-spacing: 0.5px;
+}
+
+.brand-tag {
+    font-size: 0.75rem;
+    color: var(--light-blue);
+    background-color: rgba(114, 136, 174, 0.15);
+    border: 1px solid var(--light-blue);
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn {
+    background-color: var(--blue);
+    color: var(--beige);
+    border: 1px solid var(--light-blue);
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.btn:hover {
+    background-color: var(--light-blue);
+    color: var(--navy);
+}
+
+.btn:active {
+    transform: scale(0.97);
+}
+
+.btn-run {
+    background-color: #3f7a4f;
+    border-color: #3f7a4f;
+    color: #EAE0CF;
+    font-weight: bold;
+}
+
+.btn-run:hover {
+    background-color: #4c9660;
+}
+
+.lang-badge {
+    background-color: var(--navy);
+    color: var(--beige);
+    border: 1px solid var(--light-blue);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+/* ===== Editor Section ===== */
+.editor-container {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    background-color: var(--bg-editor);
+}
+
+.line-numbers {
+    background-color: var(--bg-panel);
+    color: var(--text-secondary);
+    text-align: right;
+    padding: 12px 10px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    user-select: none;
+    border-right: 1px solid var(--border-color);
+    min-width: 45px;
+}
+
+.code-area {
+    flex: 1;
+    background-color: var(--bg-editor);
+    color: var(--beige);
+    border: none;
+    outline: none;
+    resize: none;
+    padding: 12px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    font-family: 'Consolas', 'Courier New', monospace;
+}
+
+/* ===== Terminal ===== */
+.console-wrapper {
+    background-color: var(--bg-panel);
+    border-top: 1px solid var(--border-color);
+    height: 220px;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    transition: height 0.15s ease;
+}
+
+.console-wrapper.collapsed {
+    height: 38px;
+    overflow: hidden;
+}
+
+.console-wrapper.hidden {
+    display: none;
+}
+
+.console-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--navy);
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.console-title {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+}
+
+.console-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.console-btn {
+    background: none;
+    border: none;
+    color: var(--beige);
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.console-btn:hover {
+    color: var(--light-blue);
+}
+
+.console-container {
+    flex: 1;
+    padding: 10px 14px;
+    color: #9fd6a6;
+    font-size: 0.85rem;
+    overflow-y: auto;
+    white-space: pre-wrap;
+}
