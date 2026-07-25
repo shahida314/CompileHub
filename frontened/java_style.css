@@ -16,7 +16,7 @@ body {
 
 /* Header Styling */
 .top-bar {
-    background-color: #3370a9;
+    background-color: #063c6d;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -37,7 +37,8 @@ body {
 }
 
 .btn {
-    background-color: #6d8497;
+    background-color: #3d566e;
+    ;
     color: #ffffff;
     border: none;
     padding: 6px 14px;
@@ -61,7 +62,7 @@ body {
 }
 
 .lang-select {
-    background-color: #6d8497;
+    background-color: #758eb4;
     color: #ffffff;
     border: 1px solid #415b76;
     padding: 6px 10px;
@@ -123,7 +124,7 @@ body {
 }
 
 .console-header {
-    background-color: #3370a9;
+    background-color: #063c6d;
     padding: 4px 16px;
     display: flex;
     justify-content: space-between;
