@@ -1,4 +1,4 @@
-// Default Code Templates 
+// Default Starter Code Templates
 const codeTemplates = {
     c: `#include <stdio.h>\n\nint main() {\n    printf("Hello World\\n");\n    return 0;\n}`,
     cpp: `#include <iostream>\n\nint main() {\n    std::cout << "Hello World" << std::endl;\n    return 0;\n}`,
@@ -13,19 +13,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const runBtn = document.getElementById('runBtn');
     const consoleOutput = document.getElementById('consoleOutput');
 
-    // Terminal UI Control Elements
+    // Terminal UI Controls
     const consoleWrapper = document.getElementById('consoleWrapper');
     const toggleTerminalBtn = document.getElementById('toggleTerminalBtn');
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
 
-    // Load appropriate starter code when active language changes
+    // Base URL of your Render Backend
+    const BACKEND_BASE_URL = 'https://your-render-backend-url.onrender.com/api/compile';
+
+    // Update Starter Code when switching language in the dropdown
     function handleLanguageChange() {
         const selectedLang = languageSelect.value;
         codeArea.value = codeTemplates[selectedLang] || '';
         updateLineNumbers();
     }
 
-    // Update line numbers continuously as lines are typed/deleted
+    // Update Line Numbers dynamically
     function updateLineNumbers() {
         const lines = codeArea.value.split('\n').length;
         let lineHTML = '';
@@ -35,15 +38,51 @@ document.addEventListener('DOMContentLoaded', () => {
         lineNumbers.innerHTML = lineHTML;
     }
 
-    // Run Button Event: Reveal terminal panel if closed & initiate execution feedback
-    runBtn.addEventListener('click', () => {
+    // Sync scroll between text area and line numbers
+    codeArea.addEventListener('scroll', () => {
+        lineNumbers.scrollTop = codeArea.scrollTop;
+    });
+
+    // Handle Language Swap without reloading the page
+    languageSelect.addEventListener('change', handleLanguageChange);
+
+    // Run Code Event Handler
+    runBtn.addEventListener('click', async () => {
         consoleWrapper.classList.remove('hidden', 'collapsed');
+        consoleOutput.style.color = '#27ae60';
 
         const selectedLang = languageSelect.value;
         consoleOutput.innerHTML = `&gt; Compiling and executing ${selectedLang.toUpperCase()} code...<br>&gt; `;
+
+        const code = codeArea.value;
+
+        try {
+            // Dynamic endpoint selection: /api/compile/c, /api/compile/cpp, /api/compile/java, /api/compile/python
+            const response = await fetch(`${BACKEND_BASE_URL}/${selectedLang}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ code })
+            });
+
+            const result = await response.json();
+
+            if (result.output) {
+                consoleOutput.innerHTML = `&gt; Output:<br>${result.output}`;
+            } else if (result.error) {
+                consoleOutput.style.color = '#e74c3c';
+                consoleOutput.innerHTML = `&gt; Error:<br>${result.error}`;
+            } else {
+                consoleOutput.innerHTML = `&gt; Program finished with no output.`;
+            }
+        } catch (error) {
+            consoleOutput.style.color = '#e74c3c';
+            consoleOutput.innerHTML = `&gt; Connection Error: Unable to reach backend server.<br>${error.message}`;
+        }
     });
 
-    // Keyboard Shortcut Event: Press (Ctrl + `) to Toggle Terminal Visibility
+    // Keyboard Shortcut (Ctrl + `) to toggle terminal
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === '`') {
             e.preventDefault();
@@ -52,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Minimize or Expand Terminal Toggle Button
+    // Minimize / Expand Terminal Panel
     toggleTerminalBtn.addEventListener('click', () => {
         consoleWrapper.classList.toggle('collapsed');
     });
@@ -62,10 +101,9 @@ document.addEventListener('DOMContentLoaded', () => {
         consoleWrapper.classList.add('hidden');
     });
 
-    // Event Listeners for Input & Language Selection
-    languageSelect.addEventListener('change', handleLanguageChange);
+    // Live update line numbers on code typing
     codeArea.addEventListener('input', updateLineNumbers);
 
-    // Initialize Page Setup (Defaulting to C Language)
+    // Initial setup on page load
     handleLanguageChange();
 });

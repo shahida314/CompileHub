@@ -14,14 +14,14 @@ body {
     overflow: hidden;
 }
 
-/* Header Styling */
+/* Header Styling (Java Theme Style) */
 .top-bar {
-    background-color: #2b3e50;
+    background-color: #063c6d;
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 8px 16px;
-    border-bottom: 2px solid #1a252f;
+    border-bottom: 2px solid #3370a9;
 }
 
 .brand-title {
@@ -37,7 +37,7 @@ body {
 }
 
 .btn {
-    background-color: #415b76;
+    background-color: #3d566e;
     color: #ffffff;
     border: none;
     padding: 6px 14px;
@@ -61,7 +61,7 @@ body {
 }
 
 .lang-select {
-    background-color: #34495e;
+    background-color: #758eb4;
     color: #ffffff;
     border: 1px solid #415b76;
     padding: 6px 10px;
@@ -95,6 +95,7 @@ body {
     line-height: 1.5;
     user-select: none;
     border-right: 1px solid #2d2d2d;
+    overflow: hidden;
 }
 
 .code-area {
@@ -112,7 +113,7 @@ body {
     tab-size: 4;
 }
 
-/* Terminal*/
+/* Terminal Styling */
 .console-wrapper {
     background-color: #000000;
     border-top: 1px solid #333;
@@ -122,7 +123,7 @@ body {
 }
 
 .console-header {
-    background-color: #181818;
+    background-color: #063c6d;
     padding: 4px 16px;
     display: flex;
     justify-content: space-between;
@@ -133,7 +134,7 @@ body {
 .console-title {
     font-size: 11px;
     font-weight: 700;
-    color: #888888;
+    color: #fefbfb;
     letter-spacing: 0.5px;
 }
 
@@ -164,6 +165,7 @@ body {
     font-size: 13px;
     height: 140px;
     overflow-y: auto;
+    white-space: pre-wrap;
 }
 
 .console-wrapper.collapsed .console-container {
