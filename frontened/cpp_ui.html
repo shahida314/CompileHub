@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CompileHub - C++ Compiler</title>
+    <title>CompileHub - Online Compiler & IDE</title>
     <link rel="stylesheet" href="cpp_style.css">
 </head>
 
@@ -14,7 +14,6 @@
     <header class="top-bar">
         <div class="brand">
             <span class="brand-title">CompileHub</span>
-            <span class="brand-tag">C++</span>
         </div>
 
         <!-- Actions -->
@@ -25,8 +24,13 @@
             <button class="btn" id="shareBtn">Share</button>
             <button class="btn" id="saveBtn">Save</button>
 
-            <!-- Fixed language badge (this page is C++ only) -->
-            <span class="lang-badge">Language: C++</span>
+            <!-- Language Selector -->
+            <select id="languageSelect" class="lang-select">
+                <option value="c">Language: C</option>
+                <option value="cpp" selected>Language: C++</option>
+                <option value="java">Language: Java</option>
+                <option value="python">Language: Python 3</option>
+            </select>
         </div>
     </header>
 
