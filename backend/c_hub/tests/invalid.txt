@@ -1,0 +1,5 @@
+int x
+y = 10;
+while (x > ) {
+    print x;
+}
