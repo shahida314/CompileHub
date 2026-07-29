@@ -9,6 +9,7 @@ typedef struct Symbol
     char *name;
     char *type;
     int scope;
+    int value;
     struct Symbol *next;
 } Symbol;
 
@@ -50,6 +51,7 @@ int insert_symbol(const char *name, const char *type, int scope)
     new_symbol->name = strdup(name);
     new_symbol->type = strdup(type);
     new_symbol->scope = scope;
+    new_symbol->value = 0;
     new_symbol->next = symbolTable[index];
     symbolTable[index] = new_symbol;
 
@@ -72,19 +74,45 @@ Symbol *lookup_symbol(const char *name)
     return NULL;
 }
 
+void set_variable_value(const char *name, int val)
+{
+    Symbol *s = lookup_symbol(name);
+    if (s)
+    {
+        s->value = val;
+    }
+    else
+    {
+        insert_symbol(name, "int", 0);
+        s = lookup_symbol(name);
+        if (s)
+            s->value = val;
+    }
+}
+
+int get_variable_value(const char *name)
+{
+    Symbol *s = lookup_symbol(name);
+    if (s)
+    {
+        return s->value;
+    }
+    return 0;
+}
+
 void print_symbol_table()
 {
     printf("\n=== SYMBOL TABLE ===\n");
-    printf("%-15s %-10s %-10s\n", "Name", "Type", "Scope");
-    printf("-----------------------------------\n");
+    printf("%-15s %-10s %-10s %-10s\n", "Name", "Type", "Scope", "Value");
+    printf("---------------------------------------------------\n");
     for (int i = 0; i < TABLE_SIZE; i++)
     {
         Symbol *current = symbolTable[i];
         while (current != NULL)
         {
-            printf("%-15s %-10s %-10d\n", current->name, current->type, current->scope);
+            printf("%-15s %-10s %-10d %-10d\n", current->name, current->type, current->scope, current->value);
             current = current->next;
         }
     }
-    printf("====================\n\n");
+    printf("===================================================\n\n");
 }

@@ -2,72 +2,64 @@
 #include <stdlib.h>
 #include <string.h>
 
-// AST Node Types
-typedef enum {
-    NODE_PROGRAM,
-    NODE_DECLARATION,
-    NODE_ASSIGNMENT,
+// AST Node Types (matching parser.y)
+typedef enum
+{
+    NODE_STMT_LIST,
+    NODE_DECL,
+    NODE_ASSIGN,
     NODE_IF,
     NODE_WHILE,
-    NODE_PRINT,
-    NODE_BINARY_OP,
-    NODE_IDENTIFIER,
-    NODE_LITERAL
+    NODE_PRINTF,
+    NODE_BINOP,
+    NODE_VAR,
+    NODE_NUM
 } NodeType;
 
-// AST Node Structure
-typedef struct ASTNode {
+// AST Node Structure (matching parser.y)
+typedef struct ASTNode
+{
     NodeType type;
-    char *value;
+    int int_val;
+    char *str_val;
+    int op;
     struct ASTNode *left;
     struct ASTNode *right;
     struct ASTNode *next;
 } ASTNode;
 
-// Function to Create AST Node
-ASTNode* create_node(NodeType type, char *value, ASTNode *left, ASTNode *right) {
-    ASTNode *node = (ASTNode*)malloc(sizeof(ASTNode));
-    if (!node) {
+// Function to Create Simple AST Node (used by parser.y)
+ASTNode *create_node(NodeType type)
+{
+    ASTNode *node = (ASTNode *)calloc(1, sizeof(ASTNode));
+    if (!node)
+    {
         fprintf(stderr, "Memory allocation error for AST Node\n");
         exit(1);
     }
     node->type = type;
-    node->value = value ? strdup(value) : NULL;
-    node->left = left;
-    node->right = right;
-    node->next = NULL;
     return node;
 }
 
-// Function to Print AST
-void print_ast(ASTNode *node, int depth) {
-    if (!node) return;
-
-    for (int i = 0; i < depth; i++) printf("  ");
-
-    switch (node->type) {
-        case NODE_PROGRAM: printf("Program\n"); break;
-        case NODE_DECLARATION: printf("Declaration (%s)\n", node->value); break;
-        case NODE_ASSIGNMENT: printf("Assignment (=)\n"); break;
-        case NODE_IF: printf("If-Else Statement\n"); break;
-        case NODE_WHILE: printf("While Loop\n"); break;
-        case NODE_PRINT: printf("Print Statement\n"); break;
-        case NODE_BINARY_OP: printf("Binary Op (%s)\n", node->value); break;
-        case NODE_IDENTIFIER: printf("Identifier (%s)\n", node->value); break;
-        case NODE_LITERAL: printf("Literal (%s)\n", node->value); break;
-    }
-
-    print_ast(node->left, depth + 1);
-    print_ast(node->right, depth + 1);
-    print_ast(node->next, depth);
+// Function to Create Binary Operation Node (used by parser.y)
+ASTNode *create_binop(int op, ASTNode *left, ASTNode *right)
+{
+    ASTNode *node = create_node(NODE_BINOP);
+    node->op = op;
+    node->left = left;
+    node->right = right;
+    return node;
 }
 
 // Function to Free AST Memory
-void free_ast(ASTNode *node) {
-    if (!node) return;
+void free_ast(ASTNode *node)
+{
+    if (!node)
+        return;
     free_ast(node->left);
     free_ast(node->right);
     free_ast(node->next);
-    if (node->value) free(node->value);
+    if (node->str_val)
+        free(node->str_val);
     free(node);
 }

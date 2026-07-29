@@ -49,7 +49,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Run C code
-    runBtn.addEventListener('click', async () => {
+    runBtn.addEventListener('click', async (e) => {
+        e.preventDefault(); // 👈 ১. পেজ রিফ্রেশ হওয়া আটকাবে
+
         consoleWrapper.classList.remove('hidden', 'collapsed');
         consoleOutput.style.color = '#27ae60';
         consoleOutput.innerHTML = `&gt; Compiling and executing C code...<br>&gt; `;
@@ -67,10 +69,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
 
             if (result.output) {
-                consoleOutput.innerHTML = `&gt; Output:<br>${result.output}`;
+                // 👈 ২. \n কে <br> তে কনভার্ট করা যাতে নতুন লাইন ঠিকমতো দেখায়
+                const formattedOutput = result.output.replace(/\n/g, '<br>');
+                consoleOutput.innerHTML = `&gt; Output:<br>${formattedOutput}`;
             } else if (result.error) {
+                const formattedError = result.error.replace(/\n/g, '<br>');
                 consoleOutput.style.color = '#e74c3c';
-                consoleOutput.innerHTML = `&gt; Error:<br>${result.error}`;
+                consoleOutput.innerHTML = `&gt; Error:<br>${formattedError}`;
             } else {
                 consoleOutput.innerHTML = `&gt; Process finished with no output.`;
             }
@@ -88,7 +93,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Debug Action
     if (debugBtn) {
-        debugBtn.addEventListener('click', () => {
+        debugBtn.addEventListener('click', (e) => {
+            e.preventDefault();
             consoleWrapper.classList.remove('hidden', 'collapsed');
             consoleOutput.style.color = '#f39c12';
             consoleOutput.innerHTML = `&gt; Debugging mode active...<br>&gt; Syntax check passed.`;
@@ -97,7 +103,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Stop Action
     if (stopBtn) {
-        stopBtn.addEventListener('click', () => {
+        stopBtn.addEventListener('click', (e) => {
+            e.preventDefault();
             if (currentAbortController) {
                 currentAbortController.abort();
             } else {
@@ -110,7 +117,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Share Action
     if (shareBtn) {
-        shareBtn.addEventListener('click', () => {
+        shareBtn.addEventListener('click', (e) => {
+            e.preventDefault();
             navigator.clipboard.writeText(window.location.href);
             alert('IDE link copied to clipboard!');
         });
@@ -118,7 +126,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Save Action (.c file download)
     if (saveBtn) {
-        saveBtn.addEventListener('click', () => {
+        saveBtn.addEventListener('click', (e) => {
+            e.preventDefault();
             const blob = new Blob([codeArea.value], { type: 'text/plain' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
@@ -131,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Live Server-এ শুধুমাত্র Ctrl + ` শর্টকাট
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === '`') {
-            e.preventDefault(); // ব্রাউজারের ডিফল্ট আচরণ ব্লক করবে
+            e.preventDefault();
             consoleWrapper.classList.toggle('hidden');
             consoleWrapper.classList.remove('collapsed');
         }

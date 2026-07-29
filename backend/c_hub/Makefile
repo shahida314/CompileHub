@@ -1,6 +1,6 @@
 CC = gcc
 LEX = win_flex
-YACC = win_bison
+YACC = bison -y
 
 SRC_DIR = src
 
@@ -16,4 +16,4 @@ y.tab.c y.tab.h: $(SRC_DIR)/parser/parser.y
 	$(YACC) -d $(SRC_DIR)/parser/parser.y
 
 clean:
-	del /f lex.yy.c y.tab.c y.tab.h compiler.exe
+	cmd /c del /f /q lex.yy.c y.tab.c y.tab.h compiler.exe
