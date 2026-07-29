@@ -11,10 +11,10 @@ backend/**/*.o
 backend/**/*.out
 
 # Flex and Bison runtime generated C files across all hubs
-backend/**/src/lexer/lex.yy.c
-backend/**/src/parser/y.tab.c
-backend/**/src/parser/y.tab.h
-backend/**/src/parser/y.output
+backend/**/lex.yy.c
+backend/**/y.tab.c
+backend/**/y.tab.h
+backend/**/y.output
 
 # OS overhead files
 .DS_Store
