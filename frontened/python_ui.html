@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CompileHub - Online Compiler & IDE</title>
+    <link rel="stylesheet" href="python_style.css">
+</head>
+
+<body>
+
+    <!-- Top Navigation Header -->
+    <header class="top-bar">
+        <div class="brand">
+            <span class="brand-title">CompileHub</span>
+        </div>
+
+        <!-- Actions -->
+        <div class="header-controls">
+            <button class="btn btn-run" id="runBtn">► Run</button>
+            <button class="btn" id="debugBtn">Debug</button>
+            <button class="btn" id="stopBtn">Stop</button>
+            <button class="btn" id="shareBtn">Share</button>
+            <button class="btn" id="saveBtn">Save</button>
+
+            <!-- Language Selector -->
+            <select id="languageSelect" class="lang-select">
+                <option value="c">Language: C</option>
+                <option value="cpp">Language: C++</option>
+                <option value="java">Language: Java</option>
+                <option value="python" selected>Language: Python 3</option>
+            </select>
+        </div>
+    </header>
+
+    <!-- Main Code Editor Section -->
+    <main class="editor-container">
+        <div class="line-numbers" id="lineNumbers"></div>
+        <textarea id="codeArea" class="code-area" spellcheck="false"></textarea>
+    </main>
+
+    <!-- Terminal -->
+    <footer class="console-wrapper" id="consoleWrapper">
+        <!-- Drag handle to resize terminal height -->
+        <div class="console-resize-handle" id="consoleResizeHandle"></div>
+
+        <div class="console-header">
+            <span class="console-title">TERMINAL (Press Ctrl+` to toggle)</span>
+            <div class="console-actions">
+                <button class="console-btn" id="toggleTerminalBtn" title="Minimize/Maximize">─</button>
+                <button class="console-btn" id="closeTerminalBtn" title="Close Panel">✕</button>
+            </div>
+        </div>
+        <div class="console-container" id="consoleOutput">
+            &gt; Initializing console...
+        </div>
+    </footer>
+
+    <script src="python_script.js"></script>
+</body>
+
+</html>
