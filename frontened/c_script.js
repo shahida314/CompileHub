@@ -1,4 +1,3 @@
-// Default Standard C Template
 const defaultCCode = `#include <stdio.h>\n\nint main() {\n    printf("Hello World\\n");\n    return 0;\n}`;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -15,17 +14,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const consoleWrapper = document.getElementById('consoleWrapper');
     const toggleTerminalBtn = document.getElementById('toggleTerminalBtn');
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
+    const resizeHandle = document.getElementById('consoleResizeHandle');
 
-    // API Endpoint
     const C_BACKEND_URL = 'http://localhost:5000/api/compile/c';
-
     let currentAbortController = null;
 
-    // Set initial template code
     codeArea.value = defaultCCode;
     updateLineNumbers();
 
-    // Dynamic line numbers
     function updateLineNumbers() {
         const lines = codeArea.value.split('\n').length;
         let lineHTML = '';
@@ -35,12 +31,10 @@ document.addEventListener('DOMContentLoaded', () => {
         lineNumbers.innerHTML = lineHTML;
     }
 
-    // Scroll sync for line numbers
     codeArea.addEventListener('scroll', () => {
         lineNumbers.scrollTop = codeArea.scrollTop;
     });
 
-    // Language dropdown navigation
     languageSelect.addEventListener('change', () => {
         const selected = languageSelect.value;
         if (selected === 'cpp') window.location.href = 'cpp_ui.html';
@@ -48,9 +42,8 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (selected === 'python') window.location.href = 'python_ui.html';
     });
 
-    // Run C code
     runBtn.addEventListener('click', async (e) => {
-        e.preventDefault(); // 👈 ১. পেজ রিফ্রেশ হওয়া আটকাবে
+        e.preventDefault();
 
         consoleWrapper.classList.remove('hidden', 'collapsed');
         consoleOutput.style.color = '#27ae60';
@@ -69,7 +62,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
 
             if (result.output) {
-                // 👈 ২. \n কে <br> তে কনভার্ট করা যাতে নতুন লাইন ঠিকমতো দেখায়
                 const formattedOutput = result.output.replace(/\n/g, '<br>');
                 consoleOutput.innerHTML = `&gt; Output:<br>${formattedOutput}`;
             } else if (result.error) {
@@ -91,7 +83,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Debug Action
     if (debugBtn) {
         debugBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -101,7 +92,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Stop Action
     if (stopBtn) {
         stopBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -115,7 +105,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Share Action
     if (shareBtn) {
         shareBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -124,7 +113,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Save Action (.c file download)
     if (saveBtn) {
         saveBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -137,7 +125,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Live Server-এ শুধুমাত্র Ctrl + ` শর্টকাট
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === '`') {
             e.preventDefault();
@@ -146,7 +133,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Terminal UI controls
     if (toggleTerminalBtn) {
         toggleTerminalBtn.addEventListener('click', () => consoleWrapper.classList.toggle('collapsed'));
     }
@@ -154,5 +140,44 @@ document.addEventListener('DOMContentLoaded', () => {
         closeTerminalBtn.addEventListener('click', () => consoleWrapper.classList.add('hidden'));
     }
 
+    // Terminal resize logic
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+        if (consoleWrapper.classList.contains('collapsed') ||
+            consoleWrapper.classList.contains('hidden')) return;
+
+        isResizing = true;
+        startY = e.clientY;
+        startHeight = consoleWrapper.offsetHeight;
+        consoleWrapper.classList.add('resizing');
+        document.body.style.cursor = 'ns-resize';
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+
+        const delta = startY - e.clientY;
+        let newHeight = startHeight + delta;
+
+        const minHeight = 80;
+        const maxHeight = window.innerHeight * 0.7;
+        newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
+
+        consoleWrapper.style.height = `${newHeight}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            consoleWrapper.classList.remove('resizing');
+            document.body.style.cursor = '';
+        }
+    });
+
     codeArea.addEventListener('input', updateLineNumbers);
+    updateLineNumbers();
 });
