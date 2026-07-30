@@ -1,17 +1,29 @@
 CC = gcc
 LEX = flex
-YACC = bison -d
+YACC = bison
 
-all: java_compiler.exe
+SRC_DIR = src
+LEXER_SRC = $(SRC_DIR)/lexer/lexer.l
+PARSER_SRC = $(SRC_DIR)/parser/parser.y
 
-java_compiler.exe: parser.tab.c lex.yy.c
-	$(CC) parser.tab.c lex.yy.c -o java_compiler.exe
+TARGET = java_compiler.exe
 
-parser.tab.c parser.tab.h: src/parser/parser.y
-	$(YACC) src/parser/parser.y -o parser.tab.c
+all: $(TARGET)
 
-lex.yy.c: src/lexer/lexer.l parser.tab.h
-	$(LEX) -o lex.yy.c src/lexer/lexer.l
+$(TARGET): lex.yy.c parser.tab.c
+	$(CC) parser.tab.c lex.yy.c -o $(TARGET)
+
+parser.tab.c parser.tab.h: $(PARSER_SRC)
+	$(YACC) -d $(PARSER_SRC)
+
+lex.yy.c: $(LEXER_SRC) parser.tab.h
+	$(LEX) $(LEXER_SRC)
 
 clean:
-	rm -f lex.yy.c parser.tab.c parser.tab.h java_compiler.exe
+	del /f /q parser.tab.c parser.tab.h lex.yy.c $(TARGET) 2>nul || rm -f parser.tab.c parser.tab.h lex.yy.c $(TARGET)
+
+test-valid: $(TARGET)
+	.\$(TARGET) tests/valid.txt
+
+test-invalid: $(TARGET)
+	.\$(TARGET) tests/invalid.txt

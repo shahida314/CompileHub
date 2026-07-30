@@ -1,9 +1,9 @@
-#include <stdio.h>
+int a;
+bool isReady;
 
-int x;
-x = 10;
+a = 10;
+isReady = true;
 
-
-if x > 5 ; {
-    print x;
-}
+b = 20;
+a = isReady;
+int c

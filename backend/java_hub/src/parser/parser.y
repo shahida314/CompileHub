@@ -1,22 +1,36 @@
 %{
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 extern int yylex();
-extern int line_num;
+extern int yylineno;
+extern char *yytext;
 extern FILE *yyin;
+
 void yyerror(const char *s);
+
+
+#include "../symbol_table/symbol_table.c"
+#include "../ast/ast.c"
+#include "../semantic/semantic.c"
+
+ASTNode *root = NULL;
 %}
+%union {
+    char *str_val;
+    struct ASTNode *node;
+}
 
-%token INCLUDE_STDIO RETURN PRINT PRINTF
-%token INT FLOAT BOOL IF ELSE WHILE TRUE FALSE
-%token IDENTIFIER STRING_LITERAL INT_LITERAL FLOAT_LITERAL
-%token ASSIGN PLUS MINUS MULT DIV MOD
+%token <str_val> INT FLOAT BOOL
+%token <str_val> INT_LITERAL FLOAT_LITERAL IDENTIFIER
+%token IF ELSE WHILE PRINT TRUE FALSE
+%token PLUS MINUS MULT DIV MOD ASSIGN
 %token EQ NEQ LT GT LE GE AND OR NOT
-%token SEMICOLON LBRACE RBRACE LPAREN RPAREN COMMA
+%token SEMICOLON LBRACE RBRACE LPAREN RPAREN
 
-%nonassoc IFX
-%nonassoc ELSE
+%type <node> program stmt_list stmt decl_stmt assign_stmt expr
+%type <str_val> type
 
 %left OR
 %left AND
@@ -29,82 +43,69 @@ void yyerror(const char *s);
 %%
 
 program:
-    includes statement_list
-    | statement_list
+    stmt_list { root = $1; }
     ;
 
-includes:
-    INCLUDE_STDIO
+stmt_list:
+    stmt { $$ = $1; }
+    | stmt stmt_list { $1->next = $2; $$ = $1; }
     ;
 
-statement_list:
-    statement_list statement
-    | /* empty */
+stmt:
+    decl_stmt { $$ = $1; }
+    | assign_stmt { $$ = $1; }
+    | LBRACE { enter_scope(); } stmt_list RBRACE { exit_scope(); $$ = $3; }
     ;
 
-statement:
-    declaration_stmt
-    | assignment_stmt
-    | if_stmt
-    | while_stmt
-    | print_stmt
-    | block_stmt
+type:
+    INT { $$ = "int"; }
+    | FLOAT { $$ = "float"; }
+    | BOOL { $$ = "bool"; }
     ;
 
-type_spec:
-    INT | FLOAT | BOOL
+decl_stmt:
+    type IDENTIFIER SEMICOLON {
+        if (!insert_symbol($2, $1, yylineno)) {
+            fprintf(stderr, "Semantic Error at line %d: Variable '%s' redeclared.\n", yylineno, $2);
+            semantic_errors++;
+        }
+        $$ = create_node(NODE_DECL, $2, NULL, NULL);
+        strcpy($$->data_type, $1);
+    }
     ;
 
-declaration_stmt:
-    type_spec IDENTIFIER SEMICOLON
-    | type_spec IDENTIFIER ASSIGN expression SEMICOLON
+assign_stmt:
+    IDENTIFIER ASSIGN expr SEMICOLON {
+        check_declaration($1, yylineno);
+        Symbol *s = lookup_symbol($1);
+        if (s) {
+            check_type_match(s->type, $3->data_type, yylineno);
+        }
+        $$ = create_node(NODE_ASSIGN, "=", create_node(NODE_VAR, $1, NULL, NULL), $3);
+    }
     ;
 
-assignment_stmt:
-    IDENTIFIER ASSIGN expression SEMICOLON
-    ;
-
-if_stmt:
-    IF LPAREN expression RPAREN statement ELSE statement
-    | IF LPAREN expression RPAREN statement %prec IFX
-    ;
-
-while_stmt:
-    WHILE LPAREN expression RPAREN statement
-    ;
-
-print_stmt:
-    PRINT IDENTIFIER SEMICOLON
-    | PRINT expression SEMICOLON
-    ;
-
-block_stmt:
-    LBRACE statement_list RBRACE
-    ;
-
-expression:
-    expression PLUS expression
-    | expression MINUS expression
-    | expression MULT expression
-    | expression DIV expression
-    | expression MOD expression
-    | expression EQ expression
-    | expression NEQ expression
-    | expression GT expression
-    | expression LT expression
-    | expression GE expression
-    | expression LE expression
-    | IDENTIFIER
-    | INT_LITERAL
-    | FLOAT_LITERAL
-    | TRUE
-    | FALSE
+expr:
+    INT_LITERAL { $$ = create_node(NODE_NUM, $1, NULL, NULL); strcpy($$->data_type, "int"); }
+    | FLOAT_LITERAL { $$ = create_node(NODE_NUM, $1, NULL, NULL); strcpy($$->data_type, "float"); }
+    | TRUE { $$ = create_node(NODE_NUM, "true", NULL, NULL); strcpy($$->data_type, "bool"); }
+    | FALSE { $$ = create_node(NODE_NUM, "false", NULL, NULL); strcpy($$->data_type, "bool"); }
+    | IDENTIFIER { 
+        check_declaration($1, yylineno);
+        $$ = create_node(NODE_VAR, $1, NULL, NULL);
+        Symbol *s = lookup_symbol($1);
+        if (s) strcpy($$->data_type, s->type);
+    }
+    | expr PLUS expr { 
+        $$ = create_node(NODE_BINOP, "+", $1, $3); 
+        strcpy($$->data_type, $1->data_type);
+    }
     ;
 
 %%
 
 void yyerror(const char *s) {
-    fprintf(stderr, "Syntax Error at line %d: %s\n", line_num, s);
+    fprintf(stderr, "Syntax Error at line %d near token '%s': %s\n", yylineno, yytext, s);
 }
 
 int main(int argc, char **argv) {
@@ -116,11 +117,13 @@ int main(int argc, char **argv) {
         }
         yyin = f;
     }
-    
-    if (yyparse() == 0) {
-        printf("Parsing Successful! No Syntax Errors.\n");
+
+    if (yyparse() == 0 && semantic_errors == 0) {
+        printf("Parsing & Semantic Analysis Successful!\n");
+        printf("\nGenerated AST Structure:\n");
+        print_ast(root, 0);
     } else {
-        printf("Parsing Failed.\n");
+        printf("Compilation Failed due to errors.\n");
     }
     return 0;
 }

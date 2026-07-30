@@ -1,35 +1,27 @@
 %{
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "parser.tab.h"
 
-int line_num = 1;
 void yyerror(const char *s);
 %}
 
 %option noyywrap
+%option yylineno
 
 %%
 
 "//".*                  { }
-"/*"([^*]|\*+[^/*])*\*+"/" { 
-    for (int i = 0; i < yyleng; i++) {
-        if (yytext[i] == '\n') line_num++;
-    }
-}
+"/*"([^*]|\*+[^/*])*\*+"/" { }
 
-"#include"[ \t]*"<stdio.h>"[ \t]*\n { line_num++; return INCLUDE_STDIO; }
-"#include"[ \t]*"<stdio.h>"        { return INCLUDE_STDIO; }
-
-"int"       { return INT; }
-"float"     { return FLOAT; }
-"bool"      { return BOOL; }
+"int"       { yylval.str_val = strdup(yytext); return INT; }
+"float"     { yylval.str_val = strdup(yytext); return FLOAT; }
+"bool"      { yylval.str_val = strdup(yytext); return BOOL; }
 "if"        { return IF; }
 "else"      { return ELSE; }
 "while"     { return WHILE; }
-"return"    { return RETURN; }
 "print"     { return PRINT; }
-"printf"    { return PRINTF; }
 "true"      { return TRUE; }
 "false"     { return FALSE; }
 
@@ -51,22 +43,19 @@ void yyerror(const char *s);
 "!"         { return NOT; }
 
 ";"         { return SEMICOLON; }
-","         { return COMMA; }
 "{"         { return LBRACE; }
 "}"         { return RBRACE; }
 "("         { return LPAREN; }
 ")"         { return RPAREN; }
 
-[0-9]+\.[0-9]+ { return FLOAT_LITERAL; }
-[0-9]+         { return INT_LITERAL; }
-\"([^\"\\\n]|\\.)*\" { return STRING_LITERAL; }
-[a-zA-Z_][a-zA-Z0-9_]* { return IDENTIFIER; }
+[0-9]+\.[0-9]+ { yylval.str_val = strdup(yytext); return FLOAT_LITERAL; }
+[0-9]+         { yylval.str_val = strdup(yytext); return INT_LITERAL; }
 
-\n          { line_num++; }
+[a-zA-Z_][a-zA-Z0-9_]* { yylval.str_val = strdup(yytext); return IDENTIFIER; }
+
+\n          { }
 [ \t\r]+    { }
 
-. {
-    fprintf(stderr, "Lexical Error at line %d: Unexpected character '%s'\n", line_num, yytext);
-}
+. { fprintf(stderr, "Lexical Error at line %d: Unexpected character '%s'\n", yylineno, yytext); }
 
 %%
