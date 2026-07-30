@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const consoleWrapper = document.getElementById('consoleWrapper');
     const toggleTerminalBtn = document.getElementById('toggleTerminalBtn');
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
+    const resizeHandle = document.getElementById('consoleResizeHandle');
 
     // Backend Endpoint
     const BACKEND_URL = 'https://your-render-backend-url.onrender.com/api/compile/java';
@@ -97,6 +98,46 @@ document.addEventListener('DOMContentLoaded', () => {
     // Close Terminal
     closeTerminalBtn.addEventListener('click', () => {
         consoleWrapper.classList.add('hidden');
+    });
+
+    // ===== Drag-to-resize terminal (like a normal IDE) =====
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+        // Don't allow resizing while collapsed/hidden
+        if (consoleWrapper.classList.contains('collapsed') ||
+            consoleWrapper.classList.contains('hidden')) return;
+
+        isResizing = true;
+        startY = e.clientY;
+        startHeight = consoleWrapper.offsetHeight;
+        consoleWrapper.classList.add('resizing');
+        document.body.style.cursor = 'ns-resize';
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+
+        // Dragging up increases height, dragging down decreases it
+        const delta = startY - e.clientY;
+        let newHeight = startHeight + delta;
+
+        const minHeight = 80;
+        const maxHeight = window.innerHeight * 0.7;
+        newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
+
+        consoleWrapper.style.height = `${newHeight}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            consoleWrapper.classList.remove('resizing');
+            document.body.style.cursor = '';
+        }
     });
 
     // Event Listener for text editing
