@@ -37,13 +37,16 @@
 
     <!-- Main Code Editor Section -->
     <main class="editor-container">
-        <div class="line-numbers" id="lineNumbers"></div>
-        <textarea id="codeArea" class="code-area" spellcheck="false"
-            placeholder="// Select a language from top right dropdown to start coding..."></textarea>
+        <div class="placeholder-view" id="placeholderView">
+            <div class="placeholder-icon">?</div>
+            <p class="placeholder-title">Select a language to start coding</p>
+            <p class="placeholder-subtitle">C &middot; C++ &middot; Java &middot; Python</p>
+        </div>
     </main>
 
     <!-- Terminal -->
     <footer class="console-wrapper" id="consoleWrapper">
+        <div class="resize-handle" id="resizeHandle"></div>
         <div class="console-header">
             <span class="console-title">TERMINAL (Press Ctrl+` to toggle)</span>
             <div class="console-actions">

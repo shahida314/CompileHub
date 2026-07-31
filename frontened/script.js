@@ -1,7 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
     const languageSelect = document.getElementById('languageSelect');
-    const codeArea = document.getElementById('codeArea');
-    const lineNumbers = document.getElementById('lineNumbers');
     const runBtn = document.getElementById('runBtn');
     const consoleOutput = document.getElementById('consoleOutput');
 
@@ -9,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const consoleWrapper = document.getElementById('consoleWrapper');
     const toggleTerminalBtn = document.getElementById('toggleTerminalBtn');
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
+    const resizeHandle = document.getElementById('resizeHandle');
 
     // Handle Language Page Navigation on Dropdown Select
     function handleLanguageChange() {
@@ -24,21 +23,6 @@ document.addEventListener('DOMContentLoaded', () => {
             window.location.href = 'python_ui.html';
         }
     }
-
-    // Update Line Numbers dynamically
-    function updateLineNumbers() {
-        const lines = codeArea.value.split('\n').length;
-        let lineHTML = '';
-        for (let i = 1; i <= Math.max(lines, 8); i++) {
-            lineHTML += i + '<br>';
-        }
-        lineNumbers.innerHTML = lineHTML;
-    }
-
-    // Sync scroll between text area and line numbers
-    codeArea.addEventListener('scroll', () => {
-        lineNumbers.scrollTop = codeArea.scrollTop;
-    });
 
     // Listen for language dropdown change
     languageSelect.addEventListener('change', handleLanguageChange);
@@ -69,9 +53,43 @@ document.addEventListener('DOMContentLoaded', () => {
         consoleWrapper.classList.add('hidden');
     });
 
-    // Live update line numbers on code typing
-    codeArea.addEventListener('input', updateLineNumbers);
+    // ----- Resizable Terminal (drag top edge to resize) -----
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
 
-    // Initial Line Setup
-    updateLineNumbers();
+    const MIN_HEIGHT = 100;
+    const MAX_HEIGHT_RATIO = 0.8; // don't let terminal eat more than 80% of viewport
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+        // Don't allow resizing while collapsed/hidden
+        if (consoleWrapper.classList.contains('collapsed') || consoleWrapper.classList.contains('hidden')) {
+            return;
+        }
+        isResizing = true;
+        startY = e.clientY;
+        startHeight = consoleWrapper.getBoundingClientRect().height;
+       document.body.style.userSelect = 'none';
+     document.body.style.cursor = 'ns-resize';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const delta = startY - e.clientY;
+        let newHeight = startHeight + delta;
+
+        const maxHeight = window.innerHeight * MAX_HEIGHT_RATIO;
+        if (newHeight < MIN_HEIGHT) newHeight = MIN_HEIGHT;
+        if (newHeight > maxHeight) newHeight = maxHeight;
+
+        consoleWrapper.style.height = newHeight + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            document.body.style.userSelect = '';
+            document.body.style.cursor = '';
+        }
+    });
 });

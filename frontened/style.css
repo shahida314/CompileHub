@@ -14,7 +14,7 @@ body {
     overflow: hidden;
 }
 
-/* Header Styling (Java Theme Style) */
+
 .top-bar {
     background-color: #063c6d;
     display: flex;
@@ -84,33 +84,41 @@ body {
     overflow: hidden;
 }
 
-.line-numbers {
-    width: 50px;
-    background-color: #1e1e1e;
+
+.placeholder-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
     color: #6e7681;
-    text-align: right;
-    padding: 15px 10px 15px 0;
-    font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 14px;
-    line-height: 1.5;
     user-select: none;
-    border-right: 1px solid #2d2d2d;
-    overflow: hidden;
 }
 
-.code-area {
-    flex: 1;
-    background-color: #1e1e1e;
+.placeholder-icon {
+    width: 60px;
+    height: 60px;
+    border: 2px solid #4a4a4a;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: 700;
+    color: #6e7681;
+}
+
+.placeholder-title {
+    font-size: 18px;
+    font-weight: 500;
     color: #d4d4d4;
-    border: none;
-    padding: 15px;
-    font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.placeholder-subtitle {
     font-size: 14px;
-    line-height: 1.5;
-    resize: none;
-    outline: none;
-    white-space: pre;
-    tab-size: 4;
+    color: #6e7681;
+    letter-spacing: 0.5px;
 }
 
 /* Terminal Styling */
@@ -119,7 +127,24 @@ body {
     border-top: 1px solid #333;
     display: flex;
     flex-direction: column;
-    transition: all 0.2s ease;
+    transition: height 0.2s ease;
+    position: relative;
+    height: 220px;
+    flex-shrink: 0;
+}
+
+.resize-handle {
+    position: absolute;
+    top: -4px;
+    left: 0;
+    right: 0;
+    height: 8px;
+    cursor: ns-resize;   
+    z-index: 10;
+}
+.resize-handle:hover {
+    background-color: #3370a9;
+    opacity: 0.6;
 }
 
 .console-header {
@@ -163,12 +188,20 @@ body {
     padding: 12px 16px;
     font-family: 'Consolas', 'Courier New', monospace;
     font-size: 13px;
-    height: 140px;
+    flex: 1;
     overflow-y: auto;
     white-space: pre-wrap;
 }
 
+.console-wrapper.collapsed {
+    height: auto !important;
+}
+
 .console-wrapper.collapsed .console-container {
+    display: none;
+}
+
+.console-wrapper.collapsed .resize-handle {
     display: none;
 }
 
