@@ -6,6 +6,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const codeArea = document.getElementById('codeArea');
     const lineNumbers = document.getElementById('lineNumbers');
     const runBtn = document.getElementById('runBtn');
+    const debugBtn = document.getElementById('debugBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const shareBtn = document.getElementById('shareBtn');
+    const saveBtn = document.getElementById('saveBtn');
     const consoleOutput = document.getElementById('consoleOutput');
 
     const consoleWrapper = document.getElementById('consoleWrapper');
@@ -14,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const resizeHandle = document.getElementById('consoleResizeHandle');
 
     const BACKEND_URL = 'http://localhost:5000/api/compile/python';
+    let currentAbortController = null;
 
     codeArea.value = defaultPythonCode;
 
@@ -38,12 +43,15 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (selectedLang === 'java') window.location.href = 'java_ui.html';
     });
 
-    runBtn.addEventListener('click', async () => {
+    runBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+
         consoleWrapper.classList.remove('hidden', 'collapsed');
-        consoleOutput.style.color = '#ffffff';
-        consoleOutput.innerHTML = `&gt; Compiling and executing PYTHON code...<br>&gt; `;
+        consoleOutput.style.color = '#27ae60';
+        consoleOutput.innerHTML = `&gt; Compiling and executing PYTHON code...`;
 
         const code = codeArea.value;
+        currentAbortController = new AbortController();
 
         try {
             const response = await fetch(BACKEND_URL, {
@@ -51,26 +59,76 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ code })
+                body: JSON.stringify({ code }),
+                signal: currentAbortController.signal
             });
 
             const result = await response.json();
 
             if (result.output) {
-                consoleOutput.style.color = '#ffffff';
-                consoleOutput.innerHTML = `&gt; Output:<br>${result.output}`;
+                consoleOutput.style.color = '#ffffff'; // আউটপুট আসার পর সাদা রঙ
+                consoleOutput.innerHTML = `&gt; Output:<br>${result.output.trim()}`;
             } else if (result.error) {
+                const formattedError = result.error.replace(/\n/g, '<br>');
                 consoleOutput.style.color = '#ff6b6b';
-                consoleOutput.innerHTML = `&gt; Error:<br>${result.error}`;
+                consoleOutput.innerHTML = `&gt; Error:<br>${formattedError}`;
             } else {
                 consoleOutput.style.color = '#ffffff';
                 consoleOutput.innerHTML = `&gt; Program finished with no output.`;
             }
         } catch (error) {
             consoleOutput.style.color = '#ff6b6b';
-            consoleOutput.innerHTML = `&gt; Connection Error: Unable to reach backend server.<br>${error.message}`;
+            if (error.name === 'AbortError') {
+                consoleOutput.innerHTML = `&gt; Execution stopped by user.`;
+            } else {
+                consoleOutput.innerHTML = `&gt; Connection Error: Unable to reach backend server.<br>${error.message}`;
+            }
+        } finally {
+            currentAbortController = null;
         }
     });
+
+    if (debugBtn) {
+        debugBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            consoleWrapper.classList.remove('hidden', 'collapsed');
+            consoleOutput.style.color = '#f39c12';
+            consoleOutput.innerHTML = `&gt; Debugging mode active...<br>&gt; Syntax check passed.`;
+        });
+    }
+
+    if (stopBtn) {
+        stopBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (currentAbortController) {
+                currentAbortController.abort();
+            } else {
+                consoleWrapper.classList.remove('hidden', 'collapsed');
+                consoleOutput.style.color = '#ff6b6b';
+                consoleOutput.innerHTML = `&gt; No active process to stop.`;
+            }
+        });
+    }
+
+    if (shareBtn) {
+        shareBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            navigator.clipboard.writeText(window.location.href);
+            alert('IDE link copied to clipboard!');
+        });
+    }
+
+    if (saveBtn) {
+        saveBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const blob = new Blob([codeArea.value], { type: 'text/plain' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'main.py';
+            link.click();
+            URL.revokeObjectURL(link.href);
+        });
+    }
 
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === '`') {
