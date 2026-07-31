@@ -25,6 +25,14 @@ void yyerror(const char *s);
 "true"      { return TRUE; }
 "false"     { return FALSE; }
 
+"class"     { return CLASS; }
+"public"    { return PUBLIC; }
+"static"    { return STATIC; }
+"void"      { return VOID; }
+"String"    { return STRING_TYPE; }
+"System"    { return SYSTEM_KW; }
+"return"    { return RETURN; }
+
 "+"         { return PLUS; }
 "-"         { return MINUS; }
 "*"         { return MULT; }
@@ -43,10 +51,20 @@ void yyerror(const char *s);
 "!"         { return NOT; }
 
 ";"         { return SEMICOLON; }
+","         { return COMMA; }
+"."         { return DOT; }
 "{"         { return LBRACE; }
 "}"         { return RBRACE; }
 "("         { return LPAREN; }
 ")"         { return RPAREN; }
+"["         { return LBRACKET; }
+"]"         { return RBRACKET; }
+
+\"([^\"\n])*\" {
+    yylval.str_val = strdup(yytext + 1);
+    yylval.str_val[strlen(yylval.str_val) - 1] = '\0';
+    return STRING_LITERAL;
+}
 
 [0-9]+\.[0-9]+ { yylval.str_val = strdup(yytext); return FLOAT_LITERAL; }
 [0-9]+         { yylval.str_val = strdup(yytext); return INT_LITERAL; }

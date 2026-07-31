@@ -3,8 +3,8 @@
 #include <string.h>
 
 typedef enum { NODE_DECL, NODE_ASSIGN, NODE_BINOP, NODE_UNOP, NODE_VAR, NODE_NUM,
-               NODE_IF, NODE_WHILE, NODE_PRINT, NODE_BLOCK } NodeType;
-
+               NODE_IF, NODE_WHILE, NODE_PRINT, NODE_BLOCK,
+               NODE_STR, NODE_CALL, NODE_RETURN } NodeType;
 typedef struct ASTNode {
     NodeType type;
     char value[50];

@@ -11,8 +11,7 @@ TARGET = java_compiler.exe
 all: $(TARGET)
 
 $(TARGET): lex.yy.c parser.tab.c
-	$(CC) parser.tab.c lex.yy.c -o $(TARGET)
-
+	$(CC) parser.tab.c lex.yy.c $(SRC_DIR)/ast/ast.c $(SRC_DIR)/symbol_table/symbol_table.c $(SRC_DIR)/interpreter/interpreter.c -o $(TARGET)
 parser.tab.c parser.tab.h: $(PARSER_SRC)
 	$(YACC) -d $(PARSER_SRC)
 

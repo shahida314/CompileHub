@@ -20,14 +20,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
     const resizeHandle = document.getElementById('consoleResizeHandle');
 
-    // Backend Endpoint
-    // লোকাল টেস্টের জন্য localhost, আর Render-এ ডেপ্লয় করলে Render URL টি অন করে দিবেন:
+    
     const BACKEND_URL = 'http://localhost:5000/api/compile/java';
     // const BACKEND_URL = 'https://your-render-backend-url.onrender.com/api/compile/java';
 
     // Set Default Java Code
+    // Set Default Java Code (persist across Live Server auto-reloads)
     if (codeArea) {
-        codeArea.value = defaultJavaCode;
+        const savedCode = localStorage.getItem('compilehub_java_code');
+        codeArea.value = savedCode ? savedCode : defaultJavaCode;
+        codeArea.addEventListener('input', () => {
+            localStorage.setItem('compilehub_java_code', codeArea.value);
+        });
     }
 
     // Dynamic Helper for Formatting Text Output with Line Breaks

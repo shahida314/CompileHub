@@ -2,15 +2,41 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef enum { NODE_DECL, NODE_ASSIGN, NODE_BINOP, NODE_UNOP, NODE_VAR, NODE_NUM,
+               NODE_IF, NODE_WHILE, NODE_PRINT, NODE_BLOCK,
+               NODE_STR, NODE_CALL, NODE_RETURN } NodeType;
+
+typedef struct ASTNode {
+    NodeType type;
+    char value[50];
+    char data_type[10];
+    struct ASTNode *left;
+    struct ASTNode *right;
+    struct ASTNode *extra;
+    struct ASTNode *next;
+} ASTNode;
+
+void print_ast(ASTNode *node, int level);
+
+extern void register_function(const char *name, const char *return_type, struct ASTNode *params, struct ASTNode *body);
+extern struct ASTNode* get_function_params(const char *name);
+extern struct ASTNode* get_function_body(const char *name);
+
 #define MAX_VARS 200
+#define MAX_ARGS 20
 
 typedef struct {
     char name[50];
     double value;
+    char type[10];
+    char str_value[200];
 } RuntimeVar;
 
 static RuntimeVar runtime_vars[MAX_VARS];
 static int runtime_var_count = 0;
+
+static int returning = 0;
+static double return_value = 0;
 
 void set_runtime_var(const char *name, double value) {
     for (int i = 0; i < runtime_var_count; i++) {
@@ -21,6 +47,8 @@ void set_runtime_var(const char *name, double value) {
     }
     strcpy(runtime_vars[runtime_var_count].name, name);
     runtime_vars[runtime_var_count].value = value;
+    strcpy(runtime_vars[runtime_var_count].type, "int");
+    runtime_vars[runtime_var_count].str_value[0] = '\0';
     runtime_var_count++;
 }
 
@@ -32,6 +60,71 @@ double get_runtime_var(const char *name) {
     }
     return 0;
 }
+
+void declare_runtime_var(const char *name, const char *type) {
+    for (int i = 0; i < runtime_var_count; i++) {
+        if (strcmp(runtime_vars[i].name, name) == 0) {
+            strcpy(runtime_vars[i].type, type);
+            return;
+        }
+    }
+    strcpy(runtime_vars[runtime_var_count].name, name);
+    runtime_vars[runtime_var_count].value = 0;
+    runtime_vars[runtime_var_count].str_value[0] = '\0';
+    strcpy(runtime_vars[runtime_var_count].type, type);
+    runtime_var_count++;
+}
+
+const char* get_runtime_var_type(const char *name) {
+    for (int i = 0; i < runtime_var_count; i++) {
+        if (strcmp(runtime_vars[i].name, name) == 0) {
+            return runtime_vars[i].type;
+        }
+    }
+    return "int";
+}
+
+void set_runtime_var_str(const char *name, const char *value) {
+    for (int i = 0; i < runtime_var_count; i++) {
+        if (strcmp(runtime_vars[i].name, name) == 0) {
+            strcpy(runtime_vars[i].str_value, value);
+            strcpy(runtime_vars[i].type, "String");
+            return;
+        }
+    }
+    strcpy(runtime_vars[runtime_var_count].name, name);
+    strcpy(runtime_vars[runtime_var_count].str_value, value);
+    strcpy(runtime_vars[runtime_var_count].type, "String");
+    runtime_vars[runtime_var_count].value = 0;
+    runtime_var_count++;
+}
+
+const char* get_runtime_var_str(const char *name) {
+    for (int i = 0; i < runtime_var_count; i++) {
+        if (strcmp(runtime_vars[i].name, name) == 0) {
+            return runtime_vars[i].str_value;
+        }
+    }
+    return "";
+}
+
+int is_string_node(ASTNode *node) {
+    if (!node) return 0;
+    if (node->type == NODE_STR) return 1;
+    if (node->type == NODE_VAR) {
+        return strcmp(get_runtime_var_type(node->value), "String") == 0;
+    }
+    return 0;
+}
+
+const char* get_expr_string(ASTNode *node) {
+    if (!node) return "";
+    if (node->type == NODE_STR) return node->value;
+    if (node->type == NODE_VAR) return get_runtime_var_str(node->value);
+    return "";
+}
+
+double call_function(const char *name, ASTNode *args);
 
 double eval_expr_rt(ASTNode *node) {
     if (!node) return 0;
@@ -45,6 +138,9 @@ double eval_expr_rt(ASTNode *node) {
 
         case NODE_VAR:
             return get_runtime_var(node->value);
+
+        case NODE_CALL:
+            return call_function(node->value, node->left);
 
         case NODE_UNOP:
             l = eval_expr_rt(node->left);
@@ -77,6 +173,9 @@ double eval_expr_rt(ASTNode *node) {
 
 void print_runtime_value(ASTNode *expr_node, double val) {
     const char *type = expr_node->data_type;
+    if (expr_node->type == NODE_VAR) {
+        type = get_runtime_var_type(expr_node->value);
+    }
     if (strcmp(type, "bool") == 0) {
         printf("%s\n", val != 0 ? "true" : "false");
     } else if (strcmp(type, "float") == 0) {
@@ -87,22 +186,92 @@ void print_runtime_value(ASTNode *expr_node, double val) {
 }
 
 void exec_stmt_list_rt(ASTNode *node);
+void exec_stmt_rt(ASTNode *node);
+
+double call_function(const char *name, ASTNode *args) {
+    ASTNode *params = get_function_params(name);
+    ASTNode *body = get_function_body(name);
+
+    if (!body) {
+        fprintf(stderr, "Runtime Error: function '%s' not found\n", name);
+        return 0;
+    }
+
+    double arg_vals[MAX_ARGS];
+    char arg_strs[MAX_ARGS][200];
+    int arg_is_str[MAX_ARGS];
+    int argc = 0;
+
+    ASTNode *a = args;
+    while (a && argc < MAX_ARGS) {
+        ASTNode *ex = a->left;
+        if (is_string_node(ex)) {
+            arg_is_str[argc] = 1;
+            strcpy(arg_strs[argc], get_expr_string(ex));
+        } else {
+            arg_is_str[argc] = 0;
+            arg_vals[argc] = eval_expr_rt(ex);
+        }
+        argc++;
+        a = a->next;
+    }
+
+    int saved_count = runtime_var_count;
+    RuntimeVar saved_vars[MAX_VARS];
+    memcpy(saved_vars, runtime_vars, sizeof(RuntimeVar) * saved_count);
+    runtime_var_count = 0;
+
+    ASTNode *p = params;
+    int i = 0;
+    while (p && i < argc) {
+        declare_runtime_var(p->value, p->data_type);
+        if (arg_is_str[i]) set_runtime_var_str(p->value, arg_strs[i]);
+        else set_runtime_var(p->value, arg_vals[i]);
+        p = p->next;
+        i++;
+    }
+
+    int prev_returning = returning;
+    double prev_return_value = return_value;
+    returning = 0;
+    return_value = 0;
+
+    exec_stmt_list_rt(body->left);
+
+    double result = return_value;
+
+    runtime_var_count = saved_count;
+    memcpy(runtime_vars, saved_vars, sizeof(RuntimeVar) * saved_count);
+
+    returning = prev_returning;
+    return_value = prev_return_value;
+
+    return result;
+}
 
 void exec_stmt_rt(ASTNode *node) {
     double val;
     switch (node->type) {
         case NODE_DECL:
-            set_runtime_var(node->value, 0);
+            declare_runtime_var(node->value, node->data_type);
             break;
 
         case NODE_ASSIGN:
-            val = eval_expr_rt(node->right);
-            set_runtime_var(node->left->value, val);
+            if (is_string_node(node->right)) {
+                set_runtime_var_str(node->left->value, get_expr_string(node->right));
+            } else {
+                val = eval_expr_rt(node->right);
+                set_runtime_var(node->left->value, val);
+            }
             break;
 
         case NODE_PRINT:
-            val = eval_expr_rt(node->left);
-            print_runtime_value(node->left, val);
+            if (is_string_node(node->left)) {
+                printf("%s\n", get_expr_string(node->left));
+            } else {
+                val = eval_expr_rt(node->left);
+                print_runtime_value(node->left, val);
+            }
             break;
 
         case NODE_BLOCK:
@@ -119,9 +288,18 @@ void exec_stmt_rt(ASTNode *node) {
             break;
 
         case NODE_WHILE:
-            while (eval_expr_rt(node->left) != 0) {
+            while (!returning && eval_expr_rt(node->left) != 0) {
                 exec_stmt_list_rt(node->right);
             }
+            break;
+
+        case NODE_RETURN:
+            return_value = node->left ? eval_expr_rt(node->left) : 0;
+            returning = 1;
+            break;
+
+        case NODE_CALL:
+            call_function(node->value, node->left);
             break;
 
         default:
@@ -130,12 +308,48 @@ void exec_stmt_rt(ASTNode *node) {
 }
 
 void exec_stmt_list_rt(ASTNode *node) {
-    while (node) {
+    while (node && !returning) {
         exec_stmt_rt(node);
         node = node->next;
     }
 }
 
 void run_program(ASTNode *root) {
+    ASTNode *n = root;
+    while (n) {
+        if (n->type == NODE_CALL && n->right != NULL) {
+            register_function(n->value, n->data_type, n->left, n->right);
+        }
+        n = n->next;
+    }
     exec_stmt_list_rt(root);
+}
+
+extern int yyparse(void);
+extern FILE *yyin;
+extern ASTNode *root;
+
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <source_file>\n", argv[0]);
+        return 1;
+    }
+
+    yyin = fopen(argv[1], "r");
+    if (!yyin) {
+        fprintf(stderr, "Error: cannot open file '%s'\n", argv[1]);
+        return 1;
+    }
+
+    int parse_result = yyparse();
+    fclose(yyin);
+
+    if (parse_result != 0 || root == NULL) {
+        fprintf(stderr, "Parsing failed.\n");
+        return 1;
+    }
+
+    run_program(root);
+
+    return 0;
 }

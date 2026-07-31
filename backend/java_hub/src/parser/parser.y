@@ -3,226 +3,270 @@
 #include <stdlib.h>
 #include <string.h>
 
-extern int yylex();
-extern int yylineno;
-extern char *yytext;
-extern FILE *yyin;
 
+typedef enum { NODE_DECL, NODE_ASSIGN, NODE_BINOP, NODE_UNOP, NODE_VAR, NODE_NUM,
+               NODE_IF, NODE_WHILE, NODE_PRINT, NODE_BLOCK,
+               NODE_STR, NODE_CALL, NODE_RETURN } NodeType;
+
+typedef struct ASTNode {
+    NodeType type;
+    char value[50];
+    char data_type[10];
+    struct ASTNode *left;
+    struct ASTNode *right;
+    struct ASTNode *extra;
+    struct ASTNode *next;
+} ASTNode;
+
+ASTNode* create_node(NodeType type, const char* val, ASTNode* left, ASTNode* right);
+/* ------------------------------------------------------------------ */
+
+int yylex();
 void yyerror(const char *s);
-
-#include "src/symbol_table/symbol_table.c"
-#include "src/ast/ast.c"
-#include "src/semantic/semantic.c"
-#include "src/codegen/codegen.c"
-#include "src/interpreter/interpreter.c"
-
+extern int yylineno;
 
 ASTNode *root = NULL;
 %}
+
 %union {
     char *str_val;
     struct ASTNode *node;
 }
 
-%token <str_val> INT FLOAT BOOL
-%token <str_val> INT_LITERAL FLOAT_LITERAL IDENTIFIER
+%token <str_val> INT FLOAT BOOL IDENTIFIER INT_LITERAL FLOAT_LITERAL STRING_LITERAL
 %token IF ELSE WHILE PRINT TRUE FALSE
+%token CLASS PUBLIC STATIC VOID STRING_TYPE SYSTEM_KW RETURN
 %token PLUS MINUS MULT DIV MOD ASSIGN
 %token EQ NEQ LT GT LE GE AND OR NOT
-%token SEMICOLON LBRACE RBRACE LPAREN RPAREN
+%token SEMICOLON COMMA DOT LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET
 
-%type <node> program stmt_list stmt decl_stmt assign_stmt expr
-%type <node> if_stmt while_stmt print_stmt block
-%type <str_val> type
+%type <node> program class_decl member_list member main_method func_decl
+%type <node> param_list param_list_opt
+%type <node> stmt_list stmt block decl_stmt assign_stmt if_stmt while_stmt func_stmt
+%type <node> print_stmt println_stmt return_stmt call_stmt
+%type <node> expr expr_list expr_list_opt
+%type <str_val> type_spec
 
-%right NOT UMINUS
+%right ASSIGN
 %left OR
 %left AND
-%left EQ NEQ
-%left LT GT LE GE
+%nonassoc EQ NEQ
+%nonassoc LT GT LE GE
 %left PLUS MINUS
 %left MULT DIV MOD
+%right NOT UMINUS
 
 %%
 
 program:
-    stmt_list { root = $1; }
+      class_decl { root = $1; }
+    | stmt_list  { root = $1; }
+    ;
+class_decl:
+      CLASS IDENTIFIER LBRACE member_list RBRACE { $$ = $4; }
     ;
 
-stmt_list:
-    stmt { $$ = $1; }
-    | stmt stmt_list { $1->next = $2; $$ = $1; }
+member_list:
+      member                 { $$ = $1; }
+    | member_list member     {
+            ASTNode *n = $1;
+            while (n->next) n = n->next;
+            n->next = $2;
+            $$ = $1;
+        }
+    ;
+
+member:
+      main_method   { $$ = $1; }
+    | func_decl     { $$ = $1; }
+    ;
+
+main_method:
+      PUBLIC STATIC VOID IDENTIFIER LPAREN STRING_TYPE LBRACKET RBRACKET IDENTIFIER RPAREN block
+        { $$ = create_node(NODE_BLOCK, "main", $11, NULL); }
+    ;
+
+func_decl:
+      PUBLIC STATIC type_spec IDENTIFIER LPAREN param_list_opt RPAREN block
+        {
+            ASTNode *fn = create_node(NODE_CALL, $4, $6, $8);
+            strcpy(fn->data_type, $3);
+            $$ = fn;
+        }
+    ;
+
+type_spec:
+      INT          { $$ = "int"; }
+    | FLOAT        { $$ = "float"; }
+    | BOOL         { $$ = "bool"; }
+    | VOID         { $$ = "void"; }
+    | STRING_TYPE  { $$ = "String"; }
+    ;
+
+param_list_opt:
+      /* empty */   { $$ = NULL; }
+    | param_list    { $$ = $1; }
+    ;
+
+param_list:
+      type_spec IDENTIFIER {
+            ASTNode *n = create_node(NODE_DECL, $2, NULL, NULL);
+            strcpy(n->data_type, $1);
+            $$ = n;
+        }
+    | param_list COMMA type_spec IDENTIFIER {
+            ASTNode *n = create_node(NODE_DECL, $4, NULL, NULL);
+            strcpy(n->data_type, $3);
+            ASTNode *p = $1;
+            while (p->next) p = p->next;
+            p->next = n;
+            $$ = $1;
+        }
     ;
 
 block:
-    LBRACE { enter_scope(); } stmt_list RBRACE { exit_scope(); $$ = $3; }
+      LBRACE stmt_list RBRACE { $$ = create_node(NODE_BLOCK, "block", $2, NULL); }
+    | LBRACE RBRACE           { $$ = create_node(NODE_BLOCK, "block", NULL, NULL); }
+    ;
+
+stmt_list:
+      stmt               { $$ = $1; }
+    | stmt_list stmt      {
+            ASTNode *n = $1;
+            while (n->next) n = n->next;
+            n->next = $2;
+            $$ = $1;
+        }
     ;
 
 stmt:
-    decl_stmt { $$ = $1; }
-    | assign_stmt { $$ = $1; }
-    | if_stmt { $$ = $1; }
-    | while_stmt { $$ = $1; }
-    | print_stmt { $$ = $1; }
-    | block { $$ = create_node(NODE_BLOCK, "block", $1, NULL); }
-    ;
-
-type:
-    INT { $$ = "int"; }
-    | FLOAT { $$ = "float"; }
-    | BOOL { $$ = "bool"; }
+      decl_stmt      { $$ = $1; }
+    | assign_stmt    { $$ = $1; }
+    | if_stmt        { $$ = $1; }
+    | while_stmt     { $$ = $1; }
+    | print_stmt     { $$ = $1; }
+    | println_stmt   { $$ = $1; }
+    | return_stmt    { $$ = $1; }
+    | call_stmt      { $$ = $1; }
+    | func_stmt      { $$ = $1; }
+    | block          { $$ = $1; }
     ;
 
 decl_stmt:
-    type IDENTIFIER SEMICOLON {
-        if (!insert_symbol($2, $1, yylineno)) {
-            fprintf(stderr, "Semantic Error at line %d: Variable '%s' redeclared.\n", yylineno, $2);
-            semantic_errors++;
+      type_spec IDENTIFIER SEMICOLON {
+            ASTNode *n = create_node(NODE_DECL, $2, NULL, NULL);
+            strcpy(n->data_type, $1);
+            $$ = n;
         }
-        $$ = create_node(NODE_DECL, $2, NULL, NULL);
-        strcpy($$->data_type, $1);
-    }
+    | type_spec IDENTIFIER ASSIGN expr SEMICOLON {
+            ASTNode *decl = create_node(NODE_DECL, $2, NULL, NULL);
+            strcpy(decl->data_type, $1);
+            ASTNode *var = create_node(NODE_VAR, $2, NULL, NULL);
+            ASTNode *asg = create_node(NODE_ASSIGN, $2, var, $4);
+            decl->next = asg;
+            $$ = decl;
+        }
     ;
 
 assign_stmt:
-    IDENTIFIER ASSIGN expr SEMICOLON {
-        check_declaration($1, yylineno);
-        Symbol *s = lookup_symbol($1);
-        if (s) {
-            check_type_match(s->type, $3->data_type, yylineno);
+      IDENTIFIER ASSIGN expr SEMICOLON {
+            ASTNode *var = create_node(NODE_VAR, $1, NULL, NULL);
+            $$ = create_node(NODE_ASSIGN, $1, var, $3);
         }
-        $$ = create_node(NODE_ASSIGN, "=", create_node(NODE_VAR, $1, NULL, NULL), $3);
-    }
     ;
 
 if_stmt:
-    IF LPAREN expr RPAREN block {
-        $$ = create_node(NODE_IF, "if", $3, $5);
-    }
-    | IF LPAREN expr RPAREN block ELSE block {
-        $$ = create_node(NODE_IF, "if", $3, $5);
-        $$->extra = $7;
-    }
+      IF LPAREN expr RPAREN block
+        { $$ = create_node(NODE_IF, "if", $3, $5); }
+    | IF LPAREN expr RPAREN block ELSE block
+        {
+            ASTNode *n = create_node(NODE_IF, "if", $3, $5);
+            n->extra = $7;
+            $$ = n;
+        }
     ;
 
 while_stmt:
-    WHILE LPAREN expr RPAREN block {
-        $$ = create_node(NODE_WHILE, "while", $3, $5);
-    }
+      WHILE LPAREN expr RPAREN block
+        { $$ = create_node(NODE_WHILE, "while", $3, $5); }
+    ;
+
+func_stmt:
+      type_spec IDENTIFIER LPAREN param_list_opt RPAREN block
+        {
+            ASTNode *fn = create_node(NODE_CALL, $2, $4, $6);
+            strcpy(fn->data_type, $1);
+            $$ = fn;
+        }
     ;
 
 print_stmt:
-    PRINT expr SEMICOLON {
-        $$ = create_node(NODE_PRINT, "print", $2, NULL);
-    }
+      PRINT expr SEMICOLON
+        { $$ = create_node(NODE_PRINT, "print", $2, NULL); }
+    ;
+println_stmt:
+      SYSTEM_KW DOT IDENTIFIER DOT IDENTIFIER LPAREN expr RPAREN SEMICOLON
+        { $$ = create_node(NODE_PRINT, "println", $7, NULL); }
+    ;
+
+return_stmt:
+      RETURN expr SEMICOLON
+        { $$ = create_node(NODE_RETURN, "return", $2, NULL); }
+    | RETURN SEMICOLON
+        { $$ = create_node(NODE_RETURN, "return", NULL, NULL); }
+    ;
+
+call_stmt:
+      IDENTIFIER LPAREN expr_list_opt RPAREN SEMICOLON
+        { $$ = create_node(NODE_CALL, $1, $3, NULL); }
+    ;
+
+expr_list_opt:
+      /* empty */  { $$ = NULL; }
+    | expr_list    { $$ = $1; }
+    ;
+
+expr_list:
+      expr {
+            $$ = create_node(NODE_BLOCK, "arg", $1, NULL);
+        }
+    | expr_list COMMA expr {
+            ASTNode *n = $1;
+            while (n->next) n = n->next;
+            n->next = create_node(NODE_BLOCK, "arg", $3, NULL);
+            $$ = $1;
+        }
     ;
 
 expr:
-    INT_LITERAL { $$ = create_node(NODE_NUM, $1, NULL, NULL); strcpy($$->data_type, "int"); }
-    | FLOAT_LITERAL { $$ = create_node(NODE_NUM, $1, NULL, NULL); strcpy($$->data_type, "float"); }
-    | TRUE { $$ = create_node(NODE_NUM, "true", NULL, NULL); strcpy($$->data_type, "bool"); }
-    | FALSE { $$ = create_node(NODE_NUM, "false", NULL, NULL); strcpy($$->data_type, "bool"); }
-    | IDENTIFIER {
-        check_declaration($1, yylineno);
-        $$ = create_node(NODE_VAR, $1, NULL, NULL);
-        Symbol *s = lookup_symbol($1);
-        if (s) strcpy($$->data_type, s->type);
-    }
+      expr PLUS expr   { $$ = create_node(NODE_BINOP, "+", $1, $3); }
+    | expr MINUS expr  { $$ = create_node(NODE_BINOP, "-", $1, $3); }
+    | expr MULT expr   { $$ = create_node(NODE_BINOP, "*", $1, $3); }
+    | expr DIV expr    { $$ = create_node(NODE_BINOP, "/", $1, $3); }
+    | expr MOD expr    { $$ = create_node(NODE_BINOP, "%", $1, $3); }
+    | expr EQ expr     { $$ = create_node(NODE_BINOP, "==", $1, $3); }
+    | expr NEQ expr    { $$ = create_node(NODE_BINOP, "!=", $1, $3); }
+    | expr LT expr     { $$ = create_node(NODE_BINOP, "<", $1, $3); }
+    | expr GT expr     { $$ = create_node(NODE_BINOP, ">", $1, $3); }
+    | expr LE expr     { $$ = create_node(NODE_BINOP, "<=", $1, $3); }
+    | expr GE expr     { $$ = create_node(NODE_BINOP, ">=", $1, $3); }
+    | expr AND expr    { $$ = create_node(NODE_BINOP, "&&", $1, $3); }
+    | expr OR expr     { $$ = create_node(NODE_BINOP, "||", $1, $3); }
+    | MINUS expr %prec UMINUS { $$ = create_node(NODE_UNOP, "-", $2, NULL); }
+    | NOT expr          { $$ = create_node(NODE_UNOP, "!", $2, NULL); }
     | LPAREN expr RPAREN { $$ = $2; }
-    | MINUS expr %prec UMINUS {
-        $$ = create_node(NODE_UNOP, "-", $2, NULL);
-        strcpy($$->data_type, $2->data_type);
-    }
-    | NOT expr {
-        $$ = create_node(NODE_UNOP, "!", $2, NULL);
-        strcpy($$->data_type, "bool");
-    }
-    | expr PLUS expr {
-        $$ = create_node(NODE_BINOP, "+", $1, $3);
-        strcpy($$->data_type, $1->data_type);
-    }
-    | expr MINUS expr {
-        $$ = create_node(NODE_BINOP, "-", $1, $3);
-        strcpy($$->data_type, $1->data_type);
-    }
-    | expr MULT expr {
-        $$ = create_node(NODE_BINOP, "*", $1, $3);
-        strcpy($$->data_type, $1->data_type);
-    }
-    | expr DIV expr {
-        $$ = create_node(NODE_BINOP, "/", $1, $3);
-        strcpy($$->data_type, $1->data_type);
-    }
-    | expr MOD expr {
-        $$ = create_node(NODE_BINOP, "%", $1, $3);
-        strcpy($$->data_type, $1->data_type);
-    }
-    | expr EQ expr {
-        $$ = create_node(NODE_BINOP, "==", $1, $3);
-        strcpy($$->data_type, "bool");
-    }
-    | expr NEQ expr {
-        $$ = create_node(NODE_BINOP, "!=", $1, $3);
-        strcpy($$->data_type, "bool");
-    }
-    | expr LT expr {
-        $$ = create_node(NODE_BINOP, "<", $1, $3);
-        strcpy($$->data_type, "bool");
-    }
-    | expr GT expr {
-        $$ = create_node(NODE_BINOP, ">", $1, $3);
-        strcpy($$->data_type, "bool");
-    }
-    | expr LE expr {
-        $$ = create_node(NODE_BINOP, "<=", $1, $3);
-        strcpy($$->data_type, "bool");
-    }
-    | expr GE expr {
-        $$ = create_node(NODE_BINOP, ">=", $1, $3);
-        strcpy($$->data_type, "bool");
-    }
-    | expr AND expr {
-        $$ = create_node(NODE_BINOP, "&&", $1, $3);
-        strcpy($$->data_type, "bool");
-    }
-    | expr OR expr {
-        $$ = create_node(NODE_BINOP, "||", $1, $3);
-        strcpy($$->data_type, "bool");
-    }
+    | IDENTIFIER LPAREN expr_list_opt RPAREN
+        { $$ = create_node(NODE_CALL, $1, $3, NULL); }
+    | IDENTIFIER        { $$ = create_node(NODE_VAR, $1, NULL, NULL); }
+    | INT_LITERAL        { $$ = create_node(NODE_NUM, $1, NULL, NULL); strcpy($$->data_type, "int"); }
+    | FLOAT_LITERAL       { $$ = create_node(NODE_NUM, $1, NULL, NULL); strcpy($$->data_type, "float"); }
+    | STRING_LITERAL      { $$ = create_node(NODE_STR, $1, NULL, NULL); strcpy($$->data_type, "String"); }
+    | TRUE               { $$ = create_node(NODE_NUM, "true", NULL, NULL); strcpy($$->data_type, "bool"); }
+    | FALSE              { $$ = create_node(NODE_NUM, "false", NULL, NULL); strcpy($$->data_type, "bool"); }
     ;
 
 %%
 
 void yyerror(const char *s) {
-    fprintf(stderr, "Syntax Error at line %d near token '%s': %s\n", yylineno, yytext, s);
-}
-
-int main(int argc, char **argv) {
-    if (argc > 1) {
-        FILE *f = fopen(argv[1], "r");
-        if (!f) {
-            perror("File opening failed");
-            return 1;
-        }
-        yyin = f;
-    }
-
-   int debug_mode = 0;
-    if (argc > 2 && strcmp(argv[2], "--debug") == 0) {
-        debug_mode = 1;
-    }
-
-    if (yyparse() == 0 && semantic_errors == 0) {
-        if (debug_mode) {
-            printf("Parsing & Semantic Analysis Successful!\n");
-            printf("\nGenerated AST Structure:\n");
-            print_ast(root, 0);
-            generate_tac(root);
-            printf("\n");
-        }
-        run_program(root);
-    } else {
-        printf("Compilation Failed due to errors.\n");
-    }
-    return 0;
+    fprintf(stderr, "Parser Error at line %d: %s\n", yylineno, s);
 }
