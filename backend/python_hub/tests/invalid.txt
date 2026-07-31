@@ -1,0 +1,3 @@
+print("Valid Test Case")
+x = 10
+print "Invalid Syntax Test"

@@ -8,19 +8,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const runBtn = document.getElementById('runBtn');
     const consoleOutput = document.getElementById('consoleOutput');
 
-    // Terminal UI Controls
     const consoleWrapper = document.getElementById('consoleWrapper');
     const toggleTerminalBtn = document.getElementById('toggleTerminalBtn');
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
     const resizeHandle = document.getElementById('consoleResizeHandle');
 
-    // Backend Endpoint
-    const BACKEND_URL = 'https://your-render-backend-url.onrender.com/api/compile/python';
+    const BACKEND_URL = 'http://localhost:5000/api/compile/python';
 
-    // Set Default Python Code
     codeArea.value = defaultPythonCode;
 
-    // Update Line Numbers dynamically
     function updateLineNumbers() {
         const lines = codeArea.value.split('\n').length;
         let lineHTML = '';
@@ -30,12 +26,10 @@ document.addEventListener('DOMContentLoaded', () => {
         lineNumbers.innerHTML = lineHTML;
     }
 
-    // Sync scroll between textarea and line numbers
     codeArea.addEventListener('scroll', () => {
         lineNumbers.scrollTop = codeArea.scrollTop;
     });
 
-    // Language Dropdown Redirect
     languageSelect.addEventListener('change', () => {
         const selectedLang = languageSelect.value;
         if (selectedLang === 'c') window.location.href = 'c_ui.html';
@@ -44,10 +38,9 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (selectedLang === 'java') window.location.href = 'java_ui.html';
     });
 
-    // Send Python Code to Render Backend
     runBtn.addEventListener('click', async () => {
         consoleWrapper.classList.remove('hidden', 'collapsed');
-        consoleOutput.style.color = '#27ae60';
+        consoleOutput.style.color = '#ffffff';
         consoleOutput.innerHTML = `&gt; Compiling and executing PYTHON code...<br>&gt; `;
 
         const code = codeArea.value;
@@ -64,20 +57,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
 
             if (result.output) {
+                consoleOutput.style.color = '#ffffff';
                 consoleOutput.innerHTML = `&gt; Output:<br>${result.output}`;
             } else if (result.error) {
-                consoleOutput.style.color = '#e74c3c';
+                consoleOutput.style.color = '#ff6b6b';
                 consoleOutput.innerHTML = `&gt; Error:<br>${result.error}`;
             } else {
+                consoleOutput.style.color = '#ffffff';
                 consoleOutput.innerHTML = `&gt; Program finished with no output.`;
             }
         } catch (error) {
-            consoleOutput.style.color = '#e74c3c';
+            consoleOutput.style.color = '#ff6b6b';
             consoleOutput.innerHTML = `&gt; Connection Error: Unable to reach backend server.<br>${error.message}`;
         }
     });
 
-    // Keyboard Shortcut (Ctrl + `) to toggle terminal
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === '`') {
             e.preventDefault();
@@ -86,23 +80,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Minimize / Expand Terminal
     toggleTerminalBtn.addEventListener('click', () => {
         consoleWrapper.classList.toggle('collapsed');
     });
 
-    // Close Terminal
     closeTerminalBtn.addEventListener('click', () => {
         consoleWrapper.classList.add('hidden');
     });
 
-    // ===== Drag-to-resize terminal (like a normal IDE) =====
     let isResizing = false;
     let startY = 0;
     let startHeight = 0;
 
     resizeHandle.addEventListener('mousedown', (e) => {
-        // Don't allow resizing while collapsed/hidden
         if (consoleWrapper.classList.contains('collapsed') ||
             consoleWrapper.classList.contains('hidden')) return;
 
@@ -117,7 +107,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('mousemove', (e) => {
         if (!isResizing) return;
 
-        // Dragging up increases height, dragging down decreases it
         const delta = startY - e.clientY;
         let newHeight = startHeight + delta;
 
@@ -136,9 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Event Listener for text editing
     codeArea.addEventListener('input', updateLineNumbers);
 
-    // Initial Line Numbers Setup
     updateLineNumbers();
 });

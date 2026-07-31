@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const { runCCode } = require('./c_hub/c_runner');
 const { runJavaCompiler } = require('./java_hub/java_runner');
+const { runPythonCode } = require('./python_hub/python_runner');
 
 const app = express();
 app.use(cors());
@@ -29,6 +30,19 @@ app.post('/api/compile/java', (req, res) => {
 
     runJavaCompiler(code, (output) => {
         res.json({ output });
+    });
+});
+
+// Python Compiler API Endpoint
+app.post('/api/compile/python', (req, res) => {
+    const { code } = req.body;
+
+    if (!code) {
+        return res.status(400).json({ error: 'No code provided' });
+    }
+
+    runPythonCode(code, (result) => {
+        res.json(result);
     });
 });
 
