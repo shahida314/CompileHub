@@ -316,13 +316,22 @@ void exec_stmt_list_rt(ASTNode *node) {
 
 void run_program(ASTNode *root) {
     ASTNode *n = root;
+    ASTNode *main_body = NULL;
+
     while (n) {
-        if (n->type == NODE_CALL && n->right != NULL) {
+        if (n->type == NODE_BLOCK && strcmp(n->value, "main") == 0) {
+            main_body = n->left;
+        } else if (n->type == NODE_CALL && n->right != NULL) {
             register_function(n->value, n->data_type, n->left, n->right);
         }
         n = n->next;
     }
-    exec_stmt_list_rt(root);
+
+    if (main_body) {
+        exec_stmt_list_rt(main_body->left);
+    } else {
+        exec_stmt_list_rt(root);
+    }
 }
 
 extern int yyparse(void);

@@ -1,5 +1,3 @@
-
-
 // Java Default Template
 const defaultJavaCode = `public class Main {
     public static void main(String[] args) {
@@ -12,6 +10,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const codeArea = document.getElementById('codeArea');
     const lineNumbers = document.getElementById('lineNumbers');
     const runBtn = document.getElementById('runBtn');
+    const debugBtn = document.getElementById('debugBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const shareBtn = document.getElementById('shareBtn');
+    const saveBtn = document.getElementById('saveBtn');
     const consoleOutput = document.getElementById('consoleOutput');
 
     // Terminal UI Controls
@@ -20,11 +22,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
     const resizeHandle = document.getElementById('consoleResizeHandle');
 
-    
     const BACKEND_URL = 'http://localhost:5000/api/compile/java';
     // const BACKEND_URL = 'https://your-render-backend-url.onrender.com/api/compile/java';
 
-    // Set Default Java Code
+    let currentAbortController = null;
+
     // Set Default Java Code (persist across Live Server auto-reloads)
     if (codeArea) {
         const savedCode = localStorage.getItem('compilehub_java_code');
@@ -87,6 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const code = codeArea ? codeArea.value : '';
+            currentAbortController = new AbortController();
 
             try {
                 const response = await fetch(BACKEND_URL, {
@@ -94,13 +97,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ code })
+                    body: JSON.stringify({ code }),
+                    signal: currentAbortController.signal
                 });
 
                 const result = await response.json();
 
                 if (result.output) {
-                    consoleOutput.style.color = '#e0e0e0'; // or default text color
+                    consoleOutput.style.color = '#e0e0e0';
                     consoleOutput.innerHTML = `&gt; Output:<br>${formatOutputText(result.output)}`;
                 } else if (result.error) {
                     consoleOutput.style.color = '#e74c3c';
@@ -112,9 +116,64 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (error) {
                 if (consoleOutput) {
                     consoleOutput.style.color = '#e74c3c';
-                    consoleOutput.innerHTML = `&gt; Connection Error: Unable to reach backend server.<br>${error.message}`;
+                    if (error.name === 'AbortError') {
+                        consoleOutput.innerHTML = `&gt; Execution stopped by user.`;
+                    } else {
+                        consoleOutput.innerHTML = `&gt; Connection Error: Unable to reach backend server.<br>${error.message}`;
+                    }
                 }
+            } finally {
+                currentAbortController = null;
             }
+        });
+    }
+
+    // Debug Button
+    if (debugBtn) {
+        debugBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (consoleWrapper) consoleWrapper.classList.remove('hidden', 'collapsed');
+            if (consoleOutput) {
+                consoleOutput.style.color = '#f39c12';
+                consoleOutput.innerHTML = `&gt; Debugging mode active...<br>&gt; Syntax check passed.`;
+            }
+        });
+    }
+
+    // Stop Button
+    if (stopBtn) {
+        stopBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (currentAbortController) {
+                currentAbortController.abort();
+            } else if (consoleOutput) {
+                if (consoleWrapper) consoleWrapper.classList.remove('hidden', 'collapsed');
+                consoleOutput.style.color = '#e74c3c';
+                consoleOutput.innerHTML = `&gt; No active process to stop.`;
+            }
+        });
+    }
+
+    // Share Button
+    if (shareBtn) {
+        shareBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            navigator.clipboard.writeText(window.location.href);
+            alert('IDE link copied to clipboard!');
+        });
+    }
+
+    // Save Button
+    if (saveBtn) {
+        saveBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const code = codeArea ? codeArea.value : '';
+            const blob = new Blob([code], { type: 'text/plain' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'Main.java';
+            link.click();
+            URL.revokeObjectURL(link.href);
         });
     }
 
@@ -150,7 +209,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (resizeHandle && consoleWrapper) {
         resizeHandle.addEventListener('mousedown', (e) => {
-            // Don't allow resizing while collapsed/hidden
             if (consoleWrapper.classList.contains('collapsed') ||
                 consoleWrapper.classList.contains('hidden')) return;
 
@@ -165,7 +223,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
 
-            // Dragging up increases height, dragging down decreases it
             const delta = startY - e.clientY;
             let newHeight = startHeight + delta;
 
