@@ -87,6 +87,7 @@ Function *get_function_obj(char *name) {
 }
 
 ASTNode *main_body = NULL;
+char *current_decl_type = "int";
 %}
 
 %union {
@@ -109,6 +110,9 @@ ASTNode *main_body = NULL;
 %type <node> printf_stmt block_stmt expression expression_list function_def function_call
 %type <node> return_stmt function_list_all program includes identifier_list for_init for_update
 %type <str_val> type_spec
+
+%nonassoc LOWER_THAN_ELSE
+%nonassoc ELSE
 
 %left OR
 %left AND
@@ -210,9 +214,9 @@ statement:
     ;
 
 type_spec:
-    INT    { $$ = "int"; }
-    | FLOAT  { $$ = "float"; }
-    | BOOL   { $$ = "bool"; }
+    INT    { $$ = "int"; current_decl_type = "int"; }
+    | FLOAT  { $$ = "float"; current_decl_type = "float"; }
+    | BOOL   { $$ = "bool"; current_decl_type = "bool"; }
     ;
 
 declaration_stmt:
@@ -221,13 +225,13 @@ declaration_stmt:
 
 identifier_list:
     IDENTIFIER {
-        check_declaration($1, "int", 0);
+        check_declaration($1, current_decl_type, 0);
         ASTNode *n = create_node(NODE_DECL);
         n->str_val = $1;
         $$ = n;
     }
     | IDENTIFIER ASSIGN expression {
-        check_declaration($1, "int", 0);
+        check_declaration($1, current_decl_type, 0);
         check_assignment_type($1, eval_type($3));
         ASTNode *n = create_node(NODE_ASSIGN);
         n->str_val = $1;
@@ -235,7 +239,7 @@ identifier_list:
         $$ = n;
     }
     | identifier_list COMMA IDENTIFIER {
-        check_declaration($3, "int", 0);
+        check_declaration($3, current_decl_type, 0);
         ASTNode *n = create_node(NODE_DECL);
         n->str_val = $3;
         ASTNode *curr = $1;
@@ -244,7 +248,7 @@ identifier_list:
         $$ = $1;
     }
     | identifier_list COMMA IDENTIFIER ASSIGN expression {
-        check_declaration($3, "int", 0);
+        check_declaration($3, current_decl_type, 0);
         check_assignment_type($3, eval_type($5));
         ASTNode *n = create_node(NODE_ASSIGN);
         n->str_val = $3;
@@ -275,7 +279,7 @@ if_stmt:
         n->else_branch = $7;
         $$ = n;
     }
-    | IF LPAREN expression RPAREN statement {
+    | IF LPAREN expression RPAREN statement %prec LOWER_THAN_ELSE {
         ASTNode *n = create_node(NODE_IF);
         n->cond = $3;
         n->then_branch = $5;
@@ -435,7 +439,7 @@ const char *eval_type(ASTNode *node) {
         case NODE_BOOL: return "bool";
         case NODE_VAR: {
             extern void *lookup_symbol(const char *name);
-            return "int"; // simplified: full impl would query symbol_table's stored type
+            return "int";
         }
         case NODE_UNOP:
             return node->op == NOT ? "bool" : eval_type(node->left);
@@ -563,6 +567,7 @@ void execute_ast(ASTNode *node) {
                 break;
             }
             case NODE_RETURN:
+                if (curr->left) eval_ast(curr->left);
                 return;
             default:
                 break;

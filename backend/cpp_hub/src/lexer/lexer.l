@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "y.tab.h"
+#include "parser.tab.h"
 
 int line_num = 1;
 void yyerror(const char *s);
