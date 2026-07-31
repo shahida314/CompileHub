@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
 
         consoleWrapper.classList.remove('hidden', 'collapsed');
-        consoleOutput.style.color = '#27ae60';
+        consoleOutput.style.color = '#ffffff';
         consoleOutput.innerHTML = `&gt; Compiling and executing C code...<br>&gt; `;
 
         currentAbortController = new AbortController();
@@ -62,13 +62,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
 
             if (result.output) {
-                const formattedOutput = result.output.replace(/\n/g, '<br>');
-                consoleOutput.innerHTML = `&gt; Output:<br>${formattedOutput}`;
+                consoleOutput.style.color = '#ffffff';
+                consoleOutput.innerHTML = `&gt; Output:<br>${result.output.trim()}`;
             } else if (result.error) {
                 const formattedError = result.error.replace(/\n/g, '<br>');
                 consoleOutput.style.color = '#e74c3c';
                 consoleOutput.innerHTML = `&gt; Error:<br>${formattedError}`;
             } else {
+                consoleOutput.style.color = '#ffffff';
                 consoleOutput.innerHTML = `&gt; Process finished with no output.`;
             }
         } catch (error) {
