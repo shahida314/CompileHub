@@ -10,10 +10,12 @@ extern FILE *yyin;
 
 void yyerror(const char *s);
 
+#include "src/symbol_table/symbol_table.c"
+#include "src/ast/ast.c"
+#include "src/semantic/semantic.c"
+#include "src/codegen/codegen.c"
+#include "src/interpreter/interpreter.c"
 
-#include "../symbol_table/symbol_table.c"
-#include "../ast/ast.c"
-#include "../semantic/semantic.c"
 
 ASTNode *root = NULL;
 %}
@@ -30,15 +32,16 @@ ASTNode *root = NULL;
 %token SEMICOLON LBRACE RBRACE LPAREN RPAREN
 
 %type <node> program stmt_list stmt decl_stmt assign_stmt expr
+%type <node> if_stmt while_stmt print_stmt block
 %type <str_val> type
 
+%right NOT UMINUS
 %left OR
 %left AND
 %left EQ NEQ
 %left LT GT LE GE
 %left PLUS MINUS
 %left MULT DIV MOD
-%right NOT
 
 %%
 
@@ -51,10 +54,17 @@ stmt_list:
     | stmt stmt_list { $1->next = $2; $$ = $1; }
     ;
 
+block:
+    LBRACE { enter_scope(); } stmt_list RBRACE { exit_scope(); $$ = $3; }
+    ;
+
 stmt:
     decl_stmt { $$ = $1; }
     | assign_stmt { $$ = $1; }
-    | LBRACE { enter_scope(); } stmt_list RBRACE { exit_scope(); $$ = $3; }
+    | if_stmt { $$ = $1; }
+    | while_stmt { $$ = $1; }
+    | print_stmt { $$ = $1; }
+    | block { $$ = create_node(NODE_BLOCK, "block", $1, NULL); }
     ;
 
 type:
@@ -85,20 +95,99 @@ assign_stmt:
     }
     ;
 
+if_stmt:
+    IF LPAREN expr RPAREN block {
+        $$ = create_node(NODE_IF, "if", $3, $5);
+    }
+    | IF LPAREN expr RPAREN block ELSE block {
+        $$ = create_node(NODE_IF, "if", $3, $5);
+        $$->extra = $7;
+    }
+    ;
+
+while_stmt:
+    WHILE LPAREN expr RPAREN block {
+        $$ = create_node(NODE_WHILE, "while", $3, $5);
+    }
+    ;
+
+print_stmt:
+    PRINT expr SEMICOLON {
+        $$ = create_node(NODE_PRINT, "print", $2, NULL);
+    }
+    ;
+
 expr:
     INT_LITERAL { $$ = create_node(NODE_NUM, $1, NULL, NULL); strcpy($$->data_type, "int"); }
     | FLOAT_LITERAL { $$ = create_node(NODE_NUM, $1, NULL, NULL); strcpy($$->data_type, "float"); }
     | TRUE { $$ = create_node(NODE_NUM, "true", NULL, NULL); strcpy($$->data_type, "bool"); }
     | FALSE { $$ = create_node(NODE_NUM, "false", NULL, NULL); strcpy($$->data_type, "bool"); }
-    | IDENTIFIER { 
+    | IDENTIFIER {
         check_declaration($1, yylineno);
         $$ = create_node(NODE_VAR, $1, NULL, NULL);
         Symbol *s = lookup_symbol($1);
         if (s) strcpy($$->data_type, s->type);
     }
-    | expr PLUS expr { 
-        $$ = create_node(NODE_BINOP, "+", $1, $3); 
+    | LPAREN expr RPAREN { $$ = $2; }
+    | MINUS expr %prec UMINUS {
+        $$ = create_node(NODE_UNOP, "-", $2, NULL);
+        strcpy($$->data_type, $2->data_type);
+    }
+    | NOT expr {
+        $$ = create_node(NODE_UNOP, "!", $2, NULL);
+        strcpy($$->data_type, "bool");
+    }
+    | expr PLUS expr {
+        $$ = create_node(NODE_BINOP, "+", $1, $3);
         strcpy($$->data_type, $1->data_type);
+    }
+    | expr MINUS expr {
+        $$ = create_node(NODE_BINOP, "-", $1, $3);
+        strcpy($$->data_type, $1->data_type);
+    }
+    | expr MULT expr {
+        $$ = create_node(NODE_BINOP, "*", $1, $3);
+        strcpy($$->data_type, $1->data_type);
+    }
+    | expr DIV expr {
+        $$ = create_node(NODE_BINOP, "/", $1, $3);
+        strcpy($$->data_type, $1->data_type);
+    }
+    | expr MOD expr {
+        $$ = create_node(NODE_BINOP, "%", $1, $3);
+        strcpy($$->data_type, $1->data_type);
+    }
+    | expr EQ expr {
+        $$ = create_node(NODE_BINOP, "==", $1, $3);
+        strcpy($$->data_type, "bool");
+    }
+    | expr NEQ expr {
+        $$ = create_node(NODE_BINOP, "!=", $1, $3);
+        strcpy($$->data_type, "bool");
+    }
+    | expr LT expr {
+        $$ = create_node(NODE_BINOP, "<", $1, $3);
+        strcpy($$->data_type, "bool");
+    }
+    | expr GT expr {
+        $$ = create_node(NODE_BINOP, ">", $1, $3);
+        strcpy($$->data_type, "bool");
+    }
+    | expr LE expr {
+        $$ = create_node(NODE_BINOP, "<=", $1, $3);
+        strcpy($$->data_type, "bool");
+    }
+    | expr GE expr {
+        $$ = create_node(NODE_BINOP, ">=", $1, $3);
+        strcpy($$->data_type, "bool");
+    }
+    | expr AND expr {
+        $$ = create_node(NODE_BINOP, "&&", $1, $3);
+        strcpy($$->data_type, "bool");
+    }
+    | expr OR expr {
+        $$ = create_node(NODE_BINOP, "||", $1, $3);
+        strcpy($$->data_type, "bool");
     }
     ;
 
@@ -118,10 +207,20 @@ int main(int argc, char **argv) {
         yyin = f;
     }
 
+   int debug_mode = 0;
+    if (argc > 2 && strcmp(argv[2], "--debug") == 0) {
+        debug_mode = 1;
+    }
+
     if (yyparse() == 0 && semantic_errors == 0) {
-        printf("Parsing & Semantic Analysis Successful!\n");
-        printf("\nGenerated AST Structure:\n");
-        print_ast(root, 0);
+        if (debug_mode) {
+            printf("Parsing & Semantic Analysis Successful!\n");
+            printf("\nGenerated AST Structure:\n");
+            print_ast(root, 0);
+            generate_tac(root);
+            printf("\n");
+        }
+        run_program(root);
     } else {
         printf("Compilation Failed due to errors.\n");
     }
