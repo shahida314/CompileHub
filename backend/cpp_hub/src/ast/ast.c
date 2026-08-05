@@ -17,7 +17,9 @@ typedef enum {
     NODE_NUM_FLOAT,
     NODE_BOOL,
     NODE_FUNC_CALL,
-    NODE_RETURN
+    NODE_RETURN,
+    NODE_STRING,
+    NODE_ENDL
 } NodeType;
 
 typedef struct ASTNode {
@@ -25,23 +27,20 @@ typedef struct ASTNode {
     int int_val;
     float float_val;
     int bool_val;
-    char *str_val;         // identifier name / format string
-    int op;                // token for binop/unop
-
+    char *str_val;
+    int op;
     struct ASTNode *left;
     struct ASTNode *right;
-
-    struct ASTNode *cond;          // if/while/for condition
-    struct ASTNode *then_branch;   // if - true branch
-    struct ASTNode *else_branch;   // if - false branch
-    struct ASTNode *body;          // while/for body
-    struct ASTNode *init_stmt;     // for - init
-    struct ASTNode *post_stmt;     // for - update
-
+    struct ASTNode *cond;
+    struct ASTNode *then_branch;
+    struct ASTNode *else_branch;
+    struct ASTNode *body;
+    struct ASTNode *init_stmt;
+    struct ASTNode *post_stmt;
     struct ASTNode *next;
+    struct ASTNode *stream_next;
 } ASTNode;
 
-// Create a plain AST node (used by parser.y)
 ASTNode *create_node(NodeType type) {
     ASTNode *node = (ASTNode *)calloc(1, sizeof(ASTNode));
     if (!node) {
@@ -52,7 +51,6 @@ ASTNode *create_node(NodeType type) {
     return node;
 }
 
-// Create a binary operation node (used by parser.y)
 ASTNode *create_binop(int op, ASTNode *left, ASTNode *right) {
     ASTNode *node = create_node(NODE_BINOP);
     node->op = op;
@@ -61,7 +59,6 @@ ASTNode *create_binop(int op, ASTNode *left, ASTNode *right) {
     return node;
 }
 
-// Create a unary operation node, e.g. !flag or -x (used by parser.y)
 ASTNode *create_unop(int op, ASTNode *operand) {
     ASTNode *node = create_node(NODE_UNOP);
     node->op = op;
@@ -69,7 +66,6 @@ ASTNode *create_unop(int op, ASTNode *operand) {
     return node;
 }
 
-// Free AST memory
 void free_ast(ASTNode *node) {
     if (!node) return;
     free_ast(node->left);
@@ -80,16 +76,16 @@ void free_ast(ASTNode *node) {
     free_ast(node->body);
     free_ast(node->init_stmt);
     free_ast(node->post_stmt);
+    free_ast(node->stream_next);
     free_ast(node->next);
     if (node->str_val) free(node->str_val);
     free(node);
 }
 
 static void print_indent(int indent) {
-    for (int i = 0; i < indent; i++) printf("  ");
+    for (int i = 0; i < indent; i++) printf(" ");
 }
 
-// Text-based AST printer (required by manual, Section 4.3)
 void print_ast(ASTNode *node, int indent) {
     while (node) {
         print_indent(indent);
@@ -135,7 +131,7 @@ void print_ast(ASTNode *node, int indent) {
                 print_ast(node->body, indent + 2);
                 break;
             case NODE_PRINTF:
-                printf("Printf: %s\n", node->str_val ? node->str_val : "(expr)");
+                printf("Printf: %s\n", node->str_val ? node->str_val : "(stream expr)");
                 if (node->left) print_ast(node->left, indent + 1);
                 break;
             case NODE_BINOP:
@@ -159,6 +155,12 @@ void print_ast(ASTNode *node, int indent) {
             case NODE_BOOL:
                 printf("BoolLiteral: %s\n", node->bool_val ? "true" : "false");
                 break;
+            case NODE_STRING:
+                printf("StringLiteral: %s\n", node->str_val);
+                break;
+            case NODE_ENDL:
+                printf("Endl\n");
+                break;
             case NODE_FUNC_CALL:
                 printf("FuncCall: %s\n", node->str_val);
                 if (node->left) print_ast(node->left, indent + 1);
@@ -169,6 +171,9 @@ void print_ast(ASTNode *node, int indent) {
                 break;
             default:
                 printf("Unknown Node\n");
+        }
+        if (node->stream_next) {
+            print_ast(node->stream_next, indent);
         }
         node = node->next;
     }

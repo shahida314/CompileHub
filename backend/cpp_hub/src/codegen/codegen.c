@@ -1,12 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../parser/parser.tab.h"
+#include "parser.tab.h"
 
 typedef enum {
     NODE_STMT_LIST, NODE_DECL, NODE_ASSIGN, NODE_IF, NODE_WHILE, NODE_FOR,
     NODE_PRINTF, NODE_BINOP, NODE_UNOP, NODE_VAR, NODE_NUM_INT, NODE_NUM_FLOAT,
-    NODE_BOOL, NODE_FUNC_CALL, NODE_RETURN
+    NODE_BOOL, NODE_FUNC_CALL, NODE_RETURN,
+    NODE_STRING, NODE_ENDL
 } NodeType;
 
 typedef struct ASTNode {
@@ -25,6 +26,7 @@ typedef struct ASTNode {
     struct ASTNode *init_stmt;
     struct ASTNode *post_stmt;
     struct ASTNode *next;
+    struct ASTNode *stream_next;
 } ASTNode;
 
 static int temp_count = 0;
@@ -35,6 +37,7 @@ static char *new_temp() {
     snprintf(buf, 16, "t%d", ++temp_count);
     return buf;
 }
+
 static char *new_label() {
     char *buf = (char *)malloc(16);
     snprintf(buf, 16, "L%d", ++label_count);
@@ -76,6 +79,8 @@ static char *gen_expr(ASTNode *node) {
         }
         case NODE_BOOL:
             return strdup(node->bool_val ? "true" : "false");
+        case NODE_STRING:
+            return strdup(node->str_val);
         case NODE_VAR:
             return strdup(node->str_val);
         case NODE_FUNC_CALL: {
@@ -127,10 +132,18 @@ static void gen_stmt(ASTNode *node) {
             break;
         }
         case NODE_PRINTF: {
-            if (node->left) {
-                char *val = gen_expr(node->left);
-                printf("print %s\n", val);
-                free(val);
+            if (node->str_val == NULL && node->left != NULL) {
+                ASTNode *op = node->left;
+                while (op) {
+                    if (op->type == NODE_ENDL) {
+                        printf("print \"\\n\"\n");
+                    } else {
+                        char *val = gen_expr(op);
+                        printf("print %s\n", val);
+                        free(val);
+                    }
+                    op = op->stream_next;
+                }
             } else if (node->str_val) {
                 printf("print %s\n", node->str_val);
             }
@@ -182,14 +195,13 @@ static void gen_stmt(ASTNode *node) {
             break;
         }
         case NODE_FUNC_CALL:
-            gen_expr(node); // discard the returned temp, just print the call
+            gen_expr(node);
             break;
         default:
             break;
     }
 }
 
-// Entry point — called from parser.y's main after a successful parse
 void generate_tac(ASTNode *node) {
     temp_count = 0;
     label_count = 0;

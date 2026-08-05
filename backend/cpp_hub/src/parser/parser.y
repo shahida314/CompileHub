@@ -25,7 +25,8 @@ extern int get_variable_value_bool(const char *name);
 typedef enum {
     NODE_STMT_LIST, NODE_DECL, NODE_ASSIGN, NODE_IF, NODE_WHILE, NODE_FOR,
     NODE_PRINTF, NODE_BINOP, NODE_UNOP, NODE_VAR, NODE_NUM_INT, NODE_NUM_FLOAT,
-    NODE_BOOL, NODE_FUNC_CALL, NODE_RETURN
+    NODE_BOOL, NODE_FUNC_CALL, NODE_RETURN,
+    NODE_STRING, NODE_ENDL
 } NodeType;
 
 typedef struct ASTNode {
@@ -44,13 +45,13 @@ typedef struct ASTNode {
     struct ASTNode *init_stmt;
     struct ASTNode *post_stmt;
     struct ASTNode *next;
+    struct ASTNode *stream_next;   /* chain for cout << a << b << endl; */
 } ASTNode;
 
 extern ASTNode *create_node(NodeType type);
 extern ASTNode *create_binop(int op, ASTNode *left, ASTNode *right);
 extern ASTNode *create_unop(int op, ASTNode *operand);
 extern void print_ast(ASTNode *node, int indent);
-
 extern void generate_tac(ASTNode *node);
 
 int eval_ast(ASTNode *node);
@@ -98,6 +99,7 @@ char *current_decl_type = "int";
 }
 
 %token INCLUDE_STDIO RETURN PRINTF
+%token STD USING NAMESPACE ENDL SCOPE SHL
 %token INT FLOAT BOOL IF ELSE WHILE FOR TRUE FALSE
 %token <str_val> IDENTIFIER STRING_LITERAL
 %token <int_val> INT_LITERAL
@@ -109,11 +111,11 @@ char *current_decl_type = "int";
 %type <node> statement statement_list declaration_stmt assignment_stmt if_stmt while_stmt for_stmt
 %type <node> printf_stmt block_stmt expression expression_list function_def function_call
 %type <node> return_stmt function_list_all program includes identifier_list for_init for_update
+%type <node> stream_list stream_operand
 %type <str_val> type_spec
 
 %nonassoc LOWER_THAN_ELSE
 %nonassoc ELSE
-
 %left OR
 %left AND
 %left EQ NEQ
@@ -131,25 +133,27 @@ program:
             main_body = main_func->body;
         }
     }
-    | function_list_all {
+  | function_list_all {
         Function *main_func = get_function_obj("main");
         if (main_func != NULL && main_func->body != NULL) {
             main_body = main_func->body;
         }
     }
-    ;
+  ;
 
 includes:
     INCLUDE_STDIO { $$ = NULL; }
-    ;
+  | INCLUDE_STDIO USING NAMESPACE STD SEMICOLON { $$ = NULL; }
+  ;
 
 function_list_all:
     function_list_all function_def { $$ = NULL; }
-    | function_def { $$ = NULL; }
-    ;
+  | function_def { $$ = NULL; }
+  ;
 
 function_def:
-    type_spec IDENTIFIER LPAREN type_spec IDENTIFIER RPAREN LBRACE statement_list return_stmt RBRACE {
+    type_spec IDENTIFIER LPAREN type_spec IDENTIFIER RPAREN LBRACE
+    statement_list return_stmt RBRACE {
         check_declaration($5, $4, 1);
         ASTNode *body = $8;
         ASTNode *ret = $9;
@@ -164,7 +168,7 @@ function_def:
         define_function($2, $5, $4, body);
         $$ = NULL;
     }
-    | type_spec IDENTIFIER LPAREN RPAREN LBRACE statement_list return_stmt RBRACE {
+  | type_spec IDENTIFIER LPAREN RPAREN LBRACE statement_list return_stmt RBRACE {
         ASTNode *body = $6;
         ASTNode *ret = $7;
         if (ret != NULL) {
@@ -178,7 +182,7 @@ function_def:
         define_function($2, NULL, NULL, body);
         $$ = NULL;
     }
-    ;
+  ;
 
 return_stmt:
     RETURN expression SEMICOLON {
@@ -186,8 +190,8 @@ return_stmt:
         n->left = $2;
         $$ = n;
     }
-    | /* empty */ { $$ = NULL; }
-    ;
+  | /* empty */ { $$ = NULL; }
+  ;
 
 statement_list:
     statement_list statement {
@@ -199,29 +203,29 @@ statement_list:
             $$ = $1;
         }
     }
-    | /* empty */ { $$ = NULL; }
-    ;
+  | /* empty */ { $$ = NULL; }
+  ;
 
 statement:
     declaration_stmt
-    | assignment_stmt
-    | if_stmt
-    | while_stmt
-    | for_stmt
-    | printf_stmt
-    | block_stmt
-    | function_call SEMICOLON { $$ = $1; }
-    ;
+  | assignment_stmt
+  | if_stmt
+  | while_stmt
+  | for_stmt
+  | printf_stmt
+  | block_stmt
+  | function_call SEMICOLON { $$ = $1; }
+  ;
 
 type_spec:
-    INT    { $$ = "int"; current_decl_type = "int"; }
-    | FLOAT  { $$ = "float"; current_decl_type = "float"; }
-    | BOOL   { $$ = "bool"; current_decl_type = "bool"; }
-    ;
+    INT   { $$ = "int";   current_decl_type = "int"; }
+  | FLOAT { $$ = "float"; current_decl_type = "float"; }
+  | BOOL  { $$ = "bool";  current_decl_type = "bool"; }
+  ;
 
 declaration_stmt:
     type_spec identifier_list SEMICOLON { $$ = $2; }
-    ;
+  ;
 
 identifier_list:
     IDENTIFIER {
@@ -230,7 +234,7 @@ identifier_list:
         n->str_val = $1;
         $$ = n;
     }
-    | IDENTIFIER ASSIGN expression {
+  | IDENTIFIER ASSIGN expression {
         check_declaration($1, current_decl_type, 0);
         check_assignment_type($1, eval_type($3));
         ASTNode *n = create_node(NODE_ASSIGN);
@@ -238,7 +242,7 @@ identifier_list:
         n->left = $3;
         $$ = n;
     }
-    | identifier_list COMMA IDENTIFIER {
+  | identifier_list COMMA IDENTIFIER {
         check_declaration($3, current_decl_type, 0);
         ASTNode *n = create_node(NODE_DECL);
         n->str_val = $3;
@@ -247,7 +251,7 @@ identifier_list:
         curr->next = n;
         $$ = $1;
     }
-    | identifier_list COMMA IDENTIFIER ASSIGN expression {
+  | identifier_list COMMA IDENTIFIER ASSIGN expression {
         check_declaration($3, current_decl_type, 0);
         check_assignment_type($3, eval_type($5));
         ASTNode *n = create_node(NODE_ASSIGN);
@@ -258,7 +262,7 @@ identifier_list:
         curr->next = n;
         $$ = $1;
     }
-    ;
+  ;
 
 assignment_stmt:
     IDENTIFIER ASSIGN expression SEMICOLON {
@@ -269,7 +273,7 @@ assignment_stmt:
         n->left = $3;
         $$ = n;
     }
-    ;
+  ;
 
 if_stmt:
     IF LPAREN expression RPAREN statement ELSE statement {
@@ -279,14 +283,14 @@ if_stmt:
         n->else_branch = $7;
         $$ = n;
     }
-    | IF LPAREN expression RPAREN statement %prec LOWER_THAN_ELSE {
+  | IF LPAREN expression RPAREN statement %prec LOWER_THAN_ELSE {
         ASTNode *n = create_node(NODE_IF);
         n->cond = $3;
         n->then_branch = $5;
         n->else_branch = NULL;
         $$ = n;
     }
-    ;
+  ;
 
 while_stmt:
     WHILE LPAREN expression RPAREN statement {
@@ -295,7 +299,7 @@ while_stmt:
         n->body = $5;
         $$ = n;
     }
-    ;
+  ;
 
 for_init:
     type_spec IDENTIFIER ASSIGN expression {
@@ -306,7 +310,7 @@ for_init:
         n->left = $4;
         $$ = n;
     }
-    | IDENTIFIER ASSIGN expression {
+  | IDENTIFIER ASSIGN expression {
         check_variable_usage($1);
         check_assignment_type($1, eval_type($3));
         ASTNode *n = create_node(NODE_ASSIGN);
@@ -314,7 +318,7 @@ for_init:
         n->left = $3;
         $$ = n;
     }
-    ;
+  ;
 
 for_update:
     IDENTIFIER ASSIGN expression {
@@ -325,7 +329,7 @@ for_update:
         n->left = $3;
         $$ = n;
     }
-    ;
+  ;
 
 for_stmt:
     FOR LPAREN for_init SEMICOLON expression SEMICOLON for_update RPAREN statement {
@@ -336,28 +340,58 @@ for_stmt:
         n->body = $9;
         $$ = n;
     }
-    ;
+  ;
+
+/* cout / std::cout prefix */
+cout_prefix:
+    PRINTF          { }
+  | STD SCOPE PRINTF { }
+  ;
+
+stream_operand:
+    expression      { $$ = $1; }
+  | ENDL            { $$ = create_node(NODE_ENDL); }
+  | STD SCOPE ENDL  { $$ = create_node(NODE_ENDL); }
+  ;
+
+stream_list:
+    SHL stream_operand {
+        $$ = $2;
+    }
+  | stream_list SHL stream_operand {
+        ASTNode *curr = $1;
+        while (curr->stream_next != NULL) curr = curr->stream_next;
+        curr->stream_next = $3;
+        $$ = $1;
+    }
+  ;
 
 printf_stmt:
-    PRINTF LPAREN STRING_LITERAL RPAREN SEMICOLON {
+    cout_prefix stream_list SEMICOLON {
+        ASTNode *n = create_node(NODE_PRINTF);
+        n->str_val = NULL;
+        n->left = $2;
+        $$ = n;
+    }
+  | PRINTF LPAREN STRING_LITERAL RPAREN SEMICOLON {
         ASTNode *n = create_node(NODE_PRINTF);
         n->str_val = $3;
         n->left = NULL;
         $$ = n;
     }
-    | PRINTF LPAREN STRING_LITERAL COMMA expression_list RPAREN SEMICOLON {
+  | PRINTF LPAREN STRING_LITERAL COMMA expression_list RPAREN SEMICOLON {
         ASTNode *n = create_node(NODE_PRINTF);
         n->str_val = $3;
         n->left = $5;
         $$ = n;
     }
-    | PRINTF LPAREN expression RPAREN SEMICOLON {
+  | PRINTF LPAREN expression RPAREN SEMICOLON {
         ASTNode *n = create_node(NODE_PRINTF);
         n->str_val = NULL;
         n->left = $3;
         $$ = n;
     }
-    ;
+  ;
 
 function_call:
     IDENTIFIER LPAREN expression RPAREN {
@@ -366,77 +400,83 @@ function_call:
         n->left = $3;
         $$ = n;
     }
-    | IDENTIFIER LPAREN RPAREN {
+  | IDENTIFIER LPAREN RPAREN {
         ASTNode *n = create_node(NODE_FUNC_CALL);
         n->str_val = $1;
         n->left = NULL;
         $$ = n;
     }
-    ;
+  ;
 
 expression_list:
     expression { $$ = $1; }
-    ;
+  ;
 
 block_stmt:
     LBRACE statement_list RBRACE { $$ = $2; }
-    ;
+  ;
 
 expression:
-    expression PLUS expression        { $$ = create_binop(PLUS, $1, $3); check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
-    | expression MINUS expression       { $$ = create_binop(MINUS, $1, $3); check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
-    | expression MULT expression        { $$ = create_binop(MULT, $1, $3); check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
-    | expression DIV expression         { $$ = create_binop(DIV, $1, $3); check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
-    | expression MOD expression         { $$ = create_binop(MOD, $1, $3); check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
-    | expression EQ expression          { $$ = create_binop(EQ, $1, $3); }
-    | expression NEQ expression         { $$ = create_binop(NEQ, $1, $3); }
-    | expression GT expression          { $$ = create_binop(GT, $1, $3); check_operator_types("relational", eval_type($1), eval_type($3)); }
-    | expression LT expression          { $$ = create_binop(LT, $1, $3); check_operator_types("relational", eval_type($1), eval_type($3)); }
-    | expression GE expression          { $$ = create_binop(GE, $1, $3); check_operator_types("relational", eval_type($1), eval_type($3)); }
-    | expression LE expression          { $$ = create_binop(LE, $1, $3); check_operator_types("relational", eval_type($1), eval_type($3)); }
-    | expression AND expression         { $$ = create_binop(AND, $1, $3); check_operator_types("logical", eval_type($1), eval_type($3)); }
-    | expression OR expression          { $$ = create_binop(OR, $1, $3); check_operator_types("logical", eval_type($1), eval_type($3)); }
-    | NOT expression                    { $$ = create_unop(NOT, $2); }
-    | MINUS expression %prec UMINUS     { $$ = create_unop(MINUS, $2); }
-    | LPAREN expression RPAREN          { $$ = $2; }
-    | function_call                     { $$ = $1; }
-    | IDENTIFIER {
+    expression PLUS expression  { $$ = create_binop(PLUS, $1, $3);  check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
+  | expression MINUS expression { $$ = create_binop(MINUS, $1, $3); check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
+  | expression MULT expression  { $$ = create_binop(MULT, $1, $3);  check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
+  | expression DIV expression   { $$ = create_binop(DIV, $1, $3);   check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
+  | expression MOD expression   { $$ = create_binop(MOD, $1, $3);   check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
+  | expression EQ expression    { $$ = create_binop(EQ, $1, $3); }
+  | expression NEQ expression   { $$ = create_binop(NEQ, $1, $3); }
+  | expression GT expression    { $$ = create_binop(GT, $1, $3);    check_operator_types("relational", eval_type($1), eval_type($3)); }
+  | expression LT expression    { $$ = create_binop(LT, $1, $3);    check_operator_types("relational", eval_type($1), eval_type($3)); }
+  | expression GE expression    { $$ = create_binop(GE, $1, $3);    check_operator_types("relational", eval_type($1), eval_type($3)); }
+  | expression LE expression    { $$ = create_binop(LE, $1, $3);    check_operator_types("relational", eval_type($1), eval_type($3)); }
+  | expression AND expression   { $$ = create_binop(AND, $1, $3);   check_operator_types("logical", eval_type($1), eval_type($3)); }
+  | expression OR expression    { $$ = create_binop(OR, $1, $3);    check_operator_types("logical", eval_type($1), eval_type($3)); }
+  | NOT expression               { $$ = create_unop(NOT, $2); }
+  | MINUS expression %prec UMINUS { $$ = create_unop(MINUS, $2); }
+  | LPAREN expression RPAREN     { $$ = $2; }
+  | function_call                { $$ = $1; }
+  | STRING_LITERAL {
+        ASTNode *n = create_node(NODE_STRING);
+        n->str_val = $1;
+        $$ = n;
+    }
+  | IDENTIFIER {
         check_variable_usage($1);
         ASTNode *n = create_node(NODE_VAR);
         n->str_val = $1;
         $$ = n;
     }
-    | INT_LITERAL {
+  | INT_LITERAL {
         ASTNode *n = create_node(NODE_NUM_INT);
         n->int_val = $1;
         $$ = n;
     }
-    | FLOAT_LITERAL {
+  | FLOAT_LITERAL {
         ASTNode *n = create_node(NODE_NUM_FLOAT);
         n->float_val = $1;
         $$ = n;
     }
-    | TRUE {
+  | TRUE {
         ASTNode *n = create_node(NODE_BOOL);
         n->bool_val = 1;
         $$ = n;
     }
-    | FALSE {
+  | FALSE {
         ASTNode *n = create_node(NODE_BOOL);
         n->bool_val = 0;
         $$ = n;
     }
-    ;
+  ;
 
 %%
 
-// Infers the semantic "type name" of an expression, for type-checking
+/* Infers the semantic "type name" of an expression, for type-checking */
 const char *eval_type(ASTNode *node) {
     if (!node) return "unknown";
     switch (node->type) {
         case NODE_NUM_INT: return "int";
         case NODE_NUM_FLOAT: return "float";
         case NODE_BOOL: return "bool";
+        case NODE_STRING: return "string";
         case NODE_VAR: {
             extern void *lookup_symbol(const char *name);
             return "int";
@@ -516,7 +556,28 @@ void execute_ast(ASTNode *node) {
                 break;
             case NODE_PRINTF: {
                 if (curr->str_val == NULL && curr->left != NULL) {
-                    printf("%d\n", eval_ast(curr->left));
+                    ASTNode *op = curr->left;
+                    if (op->stream_next == NULL && op->type != NODE_STRING && op->type != NODE_ENDL) {
+                        /* single expression, no chain -> old cout(expr) behaviour */
+                        printf("%d\n", eval_ast(op));
+                    } else {
+                        while (op) {
+                            if (op->type == NODE_ENDL) {
+                                printf("\n");
+                            } else if (op->type == NODE_STRING) {
+                                char *s = op->str_val;
+                                int len = strlen(s);
+                                for (int i = 1; i < len - 1; i++) putchar(s[i]);
+                            } else {
+                                const char *t = eval_type(op);
+                                if (strcmp(t, "bool") == 0)
+                                    printf("%s", eval_ast(op) ? "true" : "false");
+                                else
+                                    printf("%d", eval_ast(op));
+                            }
+                            op = op->stream_next;
+                        }
+                    }
                 } else if (curr->str_val != NULL) {
                     char *fmt = curr->str_val;
                     int len = strlen(fmt);
@@ -526,7 +587,6 @@ void execute_ast(ASTNode *node) {
                         if (fmt[i] != '"') temp[j++] = fmt[i];
                     }
                     temp[j] = '\0';
-
                     if (curr->left) {
                         int val = eval_ast(curr->left);
                         char buffer[256];
@@ -582,28 +642,23 @@ void yyerror(const char *s) {
 
 int main(int argc, char **argv) {
     init_symbol_table();
-
     if (argc > 1) {
         FILE *f = fopen(argv[1], "r");
         if (!f) { perror("File opening failed"); return 1; }
         yyin = f;
     }
-
     int parse_result = yyparse();
-
     if (parse_result == 0 && semantic_error_count == 0 && main_body != NULL) {
         printf("\n=== ABSTRACT SYNTAX TREE ===\n");
         print_ast(main_body, 0);
-
         printf("\n=== THREE ADDRESS CODE (TAC) ===\n");
         generate_tac(main_body);
-
         printf("\n=== PROGRAM OUTPUT ===\n");
         execute_ast(main_body);
     } else if (semantic_error_count > 0) {
-        fprintf(stderr, "\nCompilation failed with %d semantic error(s). TAC not generated.\n", semantic_error_count);
+        fprintf(stderr, "\nCompilation failed with %d semantic error(s). TAC not generated.\n",
+                semantic_error_count);
         return 1;
     }
-
     return parse_result;
 }

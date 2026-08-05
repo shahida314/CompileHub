@@ -19,8 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
     const resizeHandle = document.getElementById('consoleResizeHandle');
 
-    // Backend Endpoint
-    const BACKEND_URL = 'https://your-render-backend-url.onrender.com/api/compile/cpp';
+    // ✅ UPDATE: Localhost URL 
+    const BACKEND_URL = 'http://localhost:5000/api/compile/cpp';
 
     // Set Default C++ Code
     codeArea.value = defaultCppCode;
@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (selectedLang === 'java') window.location.href = 'java_ui.html';
     });
 
-    // Send C++ Code to Render Backend
+    // Send C++ Code to Backend
     runBtn.addEventListener('click', async () => {
         consoleWrapper.classList.remove('hidden', 'collapsed');
         consoleOutput.style.color = '#27ae60';
@@ -107,7 +107,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let startHeight = 0;
 
     resizeHandle.addEventListener('mousedown', (e) => {
-        // Don't allow resizing while collapsed/hidden
         if (consoleWrapper.classList.contains('collapsed') ||
             consoleWrapper.classList.contains('hidden')) return;
 
@@ -122,7 +121,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('mousemove', (e) => {
         if (!isResizing) return;
 
-        // Dragging up increases height, dragging down decreases it
         const delta = startY - e.clientY;
         let newHeight = startHeight + delta;
 
