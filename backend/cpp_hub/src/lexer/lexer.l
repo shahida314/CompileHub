@@ -20,6 +20,7 @@ void yyerror(const char *s);
 "using"      { return USING; }
 "namespace"  { return NAMESPACE; }
 "endl"       { return ENDL; }
+"cin"        { return CIN; }
 "::"         { return SCOPE; }
 
 "int"        { return INT; }
@@ -41,6 +42,7 @@ void yyerror(const char *s);
 "%"  { return MOD; }
 
 "<<" { return SHL; }
+">>" { return SHR; }
 
 "="  { return ASSIGN; }
 "==" { return EQ; }

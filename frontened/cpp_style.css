@@ -183,14 +183,32 @@ body {
     color: #fff;
 }
 
+/* Terminal Output Container */
 .console-container {
-    color: #27ae60;
+    color: #ffffff;
     padding: 12px 16px;
     font-family: 'Consolas', 'Courier New', monospace;
     font-size: 13px;
+    line-height: 1.6;
     flex: 1;
     overflow-y: auto;
     white-space: pre-wrap;
+    outline: none;
+}
+
+/* Terminal Input Field Style (যখন টার্মিনালে ইউজার ইনপুট লিখবে) */
+#terminalPrompt {
+    background: transparent;
+    border: none;
+    color: #00ff00; /* ইনপুট টেক্সট সবুজ দেখাবে */
+    outline: none;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    width: 80%;
+}
+
+#terminalPrompt::placeholder {
+    color: #6e7681;
 }
 
 .console-wrapper.collapsed {

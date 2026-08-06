@@ -19,7 +19,8 @@ typedef enum {
     NODE_FUNC_CALL,
     NODE_RETURN,
     NODE_STRING,
-    NODE_ENDL
+    NODE_ENDL,
+    NODE_INPUT
 } NodeType;
 
 typedef struct ASTNode {
@@ -133,6 +134,9 @@ void print_ast(ASTNode *node, int indent) {
             case NODE_PRINTF:
                 printf("Printf: %s\n", node->str_val ? node->str_val : "(stream expr)");
                 if (node->left) print_ast(node->left, indent + 1);
+                break;
+            case NODE_INPUT:
+                printf("Input: %s\n", node->str_val);
                 break;
             case NODE_BINOP:
                 printf("BinOp(token=%d)\n", node->op);

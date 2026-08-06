@@ -1,6 +1,4 @@
-// C++ Default Template
 const defaultCppCode = `#include <iostream>
-
 int main() {
     std::cout << "Hello World" << std::endl;
     return 0;
@@ -13,19 +11,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const runBtn = document.getElementById('runBtn');
     const consoleOutput = document.getElementById('consoleOutput');
 
-    // Terminal UI Controls
     const consoleWrapper = document.getElementById('consoleWrapper');
     const toggleTerminalBtn = document.getElementById('toggleTerminalBtn');
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
     const resizeHandle = document.getElementById('consoleResizeHandle');
 
-    // ✅ UPDATE: Localhost URL 
     const BACKEND_URL = 'http://localhost:5000/api/compile/cpp';
 
-    // Set Default C++ Code
     codeArea.value = defaultCppCode;
 
-    // Update Line Numbers dynamically
     function updateLineNumbers() {
         const lines = codeArea.value.split('\n').length;
         let lineHTML = '';
@@ -35,12 +29,10 @@ document.addEventListener('DOMContentLoaded', () => {
         lineNumbers.innerHTML = lineHTML;
     }
 
-    // Sync scroll between textarea and line numbers
     codeArea.addEventListener('scroll', () => {
         lineNumbers.scrollTop = codeArea.scrollTop;
     });
 
-    // Language Dropdown Redirect
     languageSelect.addEventListener('change', () => {
         const selectedLang = languageSelect.value;
         if (selectedLang === 'c') window.location.href = 'c_ui.html';
@@ -49,40 +41,72 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (selectedLang === 'java') window.location.href = 'java_ui.html';
     });
 
-    // Send C++ Code to Backend
-    runBtn.addEventListener('click', async () => {
+    // ব্যাকএন্ডে কোড পাঠানোর মেইন ফাংশন
+    async function runCode(inputData = '') {
         consoleWrapper.classList.remove('hidden', 'collapsed');
-        consoleOutput.style.color = '#27ae60';
-        consoleOutput.innerHTML = `&gt; Compiling and executing C++ code...<br>&gt; `;
+        consoleOutput.style.color = '#ffffff';
+        
+        // রান করার সময় লোডিং মেসেজ
+        if (!inputData) {
+            consoleOutput.innerHTML = `&gt; Compiling and executing C++ code...<br>`;
+        }
 
         const code = codeArea.value;
 
         try {
             const response = await fetch(BACKEND_URL, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ code })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code, input: inputData })
             });
-
             const result = await response.json();
+            
+            let outputHTML = '';
 
             if (result.output) {
-                consoleOutput.innerHTML = `&gt; Output:<br>${result.output}`;
+                consoleOutput.style.color = '#ffffff';
+                outputHTML = `&gt; Output:<br>${result.output.replace(/\n/g, '<br>')}`;
             } else if (result.error) {
                 consoleOutput.style.color = '#e74c3c';
-                consoleOutput.innerHTML = `&gt; Error:<br>${result.error}`;
+                outputHTML = `&gt; Error:<br>${result.error.replace(/\n/g, '<br>')}`;
             } else {
-                consoleOutput.innerHTML = `&gt; Program finished with no output.`;
+                consoleOutput.style.color = '#ffffff';
+                outputHTML = `&gt; Program finished with no output.`;
             }
+
+            // আউটপুটের নিচে সাথে সাথে একটি কাস্টম ইনপুট লাইন যোগ করে দেওয়া (যাতে ইনপুট দেওয়া সম্ভব হয়)
+            outputHTML += `<br><br>&gt; <input type="text" id="terminalPrompt" placeholder="Type input here and press Enter (if needed)..." autofocus />`;
+            
+            consoleOutput.innerHTML = outputHTML;
+
+            // ইনপুট ফিল্ড এক্টিভ করা
+            attachPromptListener();
+
         } catch (error) {
             consoleOutput.style.color = '#e74c3c';
             consoleOutput.innerHTML = `&gt; Connection Error: Unable to reach backend server.<br>${error.message}`;
         }
+    }
+
+    // টার্মিনালে ইনপুট দিয়ে Enter চাপলে পুনরায় এক্সিকিউট হওয়া
+    function attachPromptListener() {
+        const terminalPrompt = document.getElementById('terminalPrompt');
+        if (terminalPrompt) {
+            terminalPrompt.focus();
+            terminalPrompt.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const userInput = terminalPrompt.value;
+                    runCode(userInput);
+                }
+            });
+        }
+    }
+
+    // Run বাটনে ক্লিক করলেই সরাসরি রান হবে (ইনপুট থাকুক বা না থাকুক)
+    runBtn.addEventListener('click', () => {
+        runCode('');
     });
 
-    // Keyboard Shortcut (Ctrl + `) to toggle terminal
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === '`') {
             e.preventDefault();
@@ -91,17 +115,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Minimize / Expand Terminal
     toggleTerminalBtn.addEventListener('click', () => {
         consoleWrapper.classList.toggle('collapsed');
     });
 
-    // Close Terminal
     closeTerminalBtn.addEventListener('click', () => {
         consoleWrapper.classList.add('hidden');
     });
 
-    // ===== Drag-to-resize terminal (like a normal IDE) =====
     let isResizing = false;
     let startY = 0;
     let startHeight = 0;
@@ -109,7 +130,6 @@ document.addEventListener('DOMContentLoaded', () => {
     resizeHandle.addEventListener('mousedown', (e) => {
         if (consoleWrapper.classList.contains('collapsed') ||
             consoleWrapper.classList.contains('hidden')) return;
-
         isResizing = true;
         startY = e.clientY;
         startHeight = consoleWrapper.offsetHeight;
@@ -120,14 +140,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('mousemove', (e) => {
         if (!isResizing) return;
-
         const delta = startY - e.clientY;
         let newHeight = startHeight + delta;
-
         const minHeight = 80;
         const maxHeight = window.innerHeight * 0.7;
         newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
-
         consoleWrapper.style.height = `${newHeight}px`;
     });
 
@@ -139,9 +156,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Event Listener for text editing
     codeArea.addEventListener('input', updateLineNumbers);
-
-    // Initial Line Numbers Setup
     updateLineNumbers();
 });

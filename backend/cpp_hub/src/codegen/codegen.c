@@ -7,7 +7,7 @@ typedef enum {
     NODE_STMT_LIST, NODE_DECL, NODE_ASSIGN, NODE_IF, NODE_WHILE, NODE_FOR,
     NODE_PRINTF, NODE_BINOP, NODE_UNOP, NODE_VAR, NODE_NUM_INT, NODE_NUM_FLOAT,
     NODE_BOOL, NODE_FUNC_CALL, NODE_RETURN,
-    NODE_STRING, NODE_ENDL
+    NODE_STRING, NODE_ENDL, NODE_INPUT
 } NodeType;
 
 typedef struct ASTNode {
@@ -129,6 +129,15 @@ static void gen_stmt(ASTNode *node) {
             char *val = gen_expr(node->left);
             printf("%s = %s\n", node->str_val, val);
             free(val);
+            break;
+        }
+        case NODE_INPUT: {
+            /* cin >> a >> b; — generate a read instruction per variable */
+            ASTNode *op = node;
+            while (op) {
+                printf("read %s\n", op->str_val);
+                op = op->stream_next;
+            }
             break;
         }
         case NODE_PRINTF: {

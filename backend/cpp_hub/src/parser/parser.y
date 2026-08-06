@@ -21,12 +21,13 @@ extern void set_variable_value_float(const char *name, float val);
 extern float get_variable_value_float(const char *name);
 extern void set_variable_value_bool(const char *name, int val);
 extern int get_variable_value_bool(const char *name);
+extern const char *get_variable_type(const char *name);
 
 typedef enum {
     NODE_STMT_LIST, NODE_DECL, NODE_ASSIGN, NODE_IF, NODE_WHILE, NODE_FOR,
     NODE_PRINTF, NODE_BINOP, NODE_UNOP, NODE_VAR, NODE_NUM_INT, NODE_NUM_FLOAT,
     NODE_BOOL, NODE_FUNC_CALL, NODE_RETURN,
-    NODE_STRING, NODE_ENDL
+    NODE_STRING, NODE_ENDL, NODE_INPUT
 } NodeType;
 
 typedef struct ASTNode {
@@ -45,7 +46,7 @@ typedef struct ASTNode {
     struct ASTNode *init_stmt;
     struct ASTNode *post_stmt;
     struct ASTNode *next;
-    struct ASTNode *stream_next;   /* chain for cout << a << b << endl; */
+    struct ASTNode *stream_next;   /* chain for cout << a << b << endl; AND cin >> a >> b; */
 } ASTNode;
 
 extern ASTNode *create_node(NodeType type);
@@ -99,7 +100,7 @@ char *current_decl_type = "int";
 }
 
 %token INCLUDE_STDIO RETURN PRINTF
-%token STD USING NAMESPACE ENDL SCOPE SHL
+%token STD USING NAMESPACE ENDL SCOPE SHL SHR CIN
 %token INT FLOAT BOOL IF ELSE WHILE FOR TRUE FALSE
 %token <str_val> IDENTIFIER STRING_LITERAL
 %token <int_val> INT_LITERAL
@@ -109,9 +110,9 @@ char *current_decl_type = "int";
 %token SEMICOLON LBRACE RBRACE LPAREN RPAREN COMMA
 
 %type <node> statement statement_list declaration_stmt assignment_stmt if_stmt while_stmt for_stmt
-%type <node> printf_stmt block_stmt expression expression_list function_def function_call
+%type <node> printf_stmt input_stmt block_stmt expression expression_list function_def function_call
 %type <node> return_stmt function_list_all program includes identifier_list for_init for_update
-%type <node> stream_list stream_operand
+%type <node> stream_list stream_operand stream_in_list
 %type <str_val> type_spec
 
 %nonassoc LOWER_THAN_ELSE
@@ -213,6 +214,7 @@ statement:
   | while_stmt
   | for_stmt
   | printf_stmt
+  | input_stmt
   | block_stmt
   | function_call SEMICOLON { $$ = $1; }
   ;
@@ -393,6 +395,36 @@ printf_stmt:
     }
   ;
 
+/* cin / std::cin prefix — NEW */
+cin_prefix:
+    CIN            { }
+  | STD SCOPE CIN  { }
+  ;
+
+stream_in_list:
+    SHR IDENTIFIER {
+        check_variable_usage($2);
+        ASTNode *n = create_node(NODE_INPUT);
+        n->str_val = $2;
+        $$ = n;
+    }
+  | stream_in_list SHR IDENTIFIER {
+        check_variable_usage($3);
+        ASTNode *n = create_node(NODE_INPUT);
+        n->str_val = $3;
+        ASTNode *curr = $1;
+        while (curr->stream_next != NULL) curr = curr->stream_next;
+        curr->stream_next = n;
+        $$ = $1;
+    }
+  ;
+
+input_stmt:
+    cin_prefix stream_in_list SEMICOLON {
+        $$ = $2;
+    }
+  ;
+
 function_call:
     IDENTIFIER LPAREN expression RPAREN {
         ASTNode *n = create_node(NODE_FUNC_CALL);
@@ -478,8 +510,7 @@ const char *eval_type(ASTNode *node) {
         case NODE_BOOL: return "bool";
         case NODE_STRING: return "string";
         case NODE_VAR: {
-            extern void *lookup_symbol(const char *name);
-            return "int";
+            return get_variable_type(node->str_val);
         }
         case NODE_UNOP:
             return node->op == NOT ? "bool" : eval_type(node->left);
@@ -554,11 +585,33 @@ void execute_ast(ASTNode *node) {
             case NODE_ASSIGN:
                 set_variable_value(curr->str_val, eval_ast(curr->left));
                 break;
+            case NODE_INPUT: {
+                /* cin >> a >> b >> c; — read each variable according to its declared type */
+                ASTNode *op = curr;
+                while (op) {
+                    const char *t = get_variable_type(op->str_val);
+                    if (strcmp(t, "float") == 0) {
+                        float fv = 0.0f;
+                        if (scanf("%f", &fv) != 1) { fv = 0.0f; }
+                        set_variable_value_float(op->str_val, fv);
+                        set_variable_value(op->str_val, (int)fv);
+                    } else {
+                        int iv = 0;
+                        if (scanf("%d", &iv) != 1) { iv = 0; }
+                        set_variable_value(op->str_val, iv);
+                        if (strcmp(t, "bool") == 0) set_variable_value_bool(op->str_val, iv != 0);
+                    }
+                    op = op->stream_next;
+                }
+                /* NODE_INPUT chain is consumed as a whole statement; skip the rest of the chain
+                   in the outer while() so it isn't treated as separate top-level statements. */
+                curr = curr->next;
+                continue;
+            }
             case NODE_PRINTF: {
                 if (curr->str_val == NULL && curr->left != NULL) {
                     ASTNode *op = curr->left;
                     if (op->stream_next == NULL && op->type != NODE_STRING && op->type != NODE_ENDL) {
-                        /* single expression, no chain -> old cout(expr) behaviour */
                         printf("%d\n", eval_ast(op));
                     } else {
                         while (op) {

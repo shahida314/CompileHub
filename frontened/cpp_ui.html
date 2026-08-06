@@ -40,7 +40,7 @@
         <textarea id="codeArea" class="code-area" spellcheck="false"></textarea>
     </main>
 
-    <!-- Terminal -->
+    <!-- Terminal (Interactive Output & Input) -->
     <footer class="console-wrapper" id="consoleWrapper">
         <!-- Drag handle to resize terminal height -->
         <div class="console-resize-handle" id="consoleResizeHandle"></div>
@@ -52,7 +52,9 @@
                 <button class="console-btn" id="closeTerminalBtn" title="Close Panel">✕</button>
             </div>
         </div>
-        <div class="console-container" id="consoleOutput">
+        
+        <!-- Interactive Terminal Console -->
+        <div class="console-container" id="consoleOutput" contenteditable="true" spellcheck="false">
             &gt; Initializing console...
         </div>
     </footer>

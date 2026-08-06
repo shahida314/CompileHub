@@ -40,15 +40,13 @@ app.post('/api/compile/c', (req, res) => {
 
 // C++ Code Execution Endpoint 
 app.post('/api/compile/cpp', (req, res) => {
-    const { code } = req.body;
-
-    if (!code) {
-        return res.status(400).json({ error: 'No code provided' });
-    }
-
-    runCppCode(code, (result) => {
-        res.json(result);
-    });
+  const { code, input } = req.body;
+  if (!code) {
+    return res.status(400).json({ error: 'No code provided' });
+  }
+  runCppCode(code, input, (result) => {
+    res.json(result);
+  });
 });
 
 // Java Code Execution Endpoint

@@ -6,7 +6,7 @@
 
 typedef struct Symbol {
     char *name;
-    char *type;     // "int" | "float" | "bool"
+    char *type; // "int" | "float" | "bool"
     int scope;
     int int_val;
     float float_val;
@@ -34,14 +34,12 @@ void init_symbol_table() {
 int insert_symbol(const char *name, const char *type, int scope) {
     unsigned int index = hash(name);
     Symbol *current = symbolTable[index];
-
     while (current != NULL) {
         if (strcmp(current->name, name) == 0 && current->scope == scope) {
             return 0; // redeclaration in same scope
         }
         current = current->next;
     }
-
     Symbol *new_symbol = (Symbol *)malloc(sizeof(Symbol));
     new_symbol->name = strdup(name);
     new_symbol->type = strdup(type);
@@ -51,14 +49,12 @@ int insert_symbol(const char *name, const char *type, int scope) {
     new_symbol->bool_val = 0;
     new_symbol->next = symbolTable[index];
     symbolTable[index] = new_symbol;
-
     return 1;
 }
 
 Symbol *lookup_symbol(const char *name) {
     unsigned int index = hash(name);
     Symbol *current = symbolTable[index];
-
     while (current != NULL) {
         if (strcmp(current->name, name) == 0) {
             return current;
@@ -68,12 +64,19 @@ Symbol *lookup_symbol(const char *name) {
     return NULL;
 }
 
+// NEW: returns the declared type of a variable, used for input (cin) and eval_type
+const char *get_variable_type(const char *name) {
+    Symbol *s = lookup_symbol(name);
+    return s ? s->type : "int";
+}
+
 // ---- int ----
 void set_variable_value(const char *name, int val) {
     Symbol *s = lookup_symbol(name);
     if (!s) { insert_symbol(name, "int", 0); s = lookup_symbol(name); }
     if (s) s->int_val = val;
 }
+
 int get_variable_value(const char *name) {
     Symbol *s = lookup_symbol(name);
     return s ? s->int_val : 0;
@@ -85,6 +88,7 @@ void set_variable_value_float(const char *name, float val) {
     if (!s) { insert_symbol(name, "float", 0); s = lookup_symbol(name); }
     if (s) s->float_val = val;
 }
+
 float get_variable_value_float(const char *name) {
     Symbol *s = lookup_symbol(name);
     return s ? s->float_val : 0.0f;
@@ -96,6 +100,7 @@ void set_variable_value_bool(const char *name, int val) {
     if (!s) { insert_symbol(name, "bool", 0); s = lookup_symbol(name); }
     if (s) s->bool_val = val;
 }
+
 int get_variable_value_bool(const char *name) {
     Symbol *s = lookup_symbol(name);
     return s ? s->bool_val : 0;
