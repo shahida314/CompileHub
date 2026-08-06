@@ -1,5 +1,4 @@
-// Python Default Template
-const defaultPythonCode = `print("Hello World")`;
+const defaultPythonCode = `print("Hello, World!")`;
 
 document.addEventListener('DOMContentLoaded', () => {
     const languageSelect = document.getElementById('languageSelect');
@@ -11,16 +10,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const shareBtn = document.getElementById('shareBtn');
     const saveBtn = document.getElementById('saveBtn');
     const consoleOutput = document.getElementById('consoleOutput');
-
     const consoleWrapper = document.getElementById('consoleWrapper');
+
     const toggleTerminalBtn = document.getElementById('toggleTerminalBtn');
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
     const resizeHandle = document.getElementById('consoleResizeHandle');
 
-    const BACKEND_URL = 'http://localhost:5000/api/compile/python';
-    let currentAbortController = null;
+    let ws = null;
+    let inputStartPos = 0;
 
     codeArea.value = defaultPythonCode;
+
+    // Initial clean terminal text matching C console style
+    consoleOutput.style.color = '#27ae60';
+    consoleOutput.innerText = `> Initializing Python Console...`;
 
     function updateLineNumbers() {
         const lines = codeArea.value.split('\n').length;
@@ -43,48 +46,58 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (selectedLang === 'java') window.location.href = 'java_ui.html';
     });
 
-    runBtn.addEventListener('click', async (e) => {
+    // Run code via WebSocket
+    runBtn.addEventListener('click', (e) => {
         e.preventDefault();
 
         consoleWrapper.classList.remove('hidden', 'collapsed');
-        consoleOutput.style.color = '#27ae60';
-        consoleOutput.innerHTML = `&gt; Compiling and executing PYTHON code...`;
+        consoleOutput.style.color = '#ffffff';
+        consoleOutput.innerText = ``;
 
-        const code = codeArea.value;
-        currentAbortController = new AbortController();
+        inputStartPos = 0;
 
-        try {
-            const response = await fetch(BACKEND_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ code }),
-                signal: currentAbortController.signal
-            });
+        if (ws) ws.close();
+        ws = new WebSocket('ws://localhost:5000');
 
-            const result = await response.json();
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ type: 'start', code: codeArea.value }));
+        };
 
-            if (result.output) {
-                consoleOutput.style.color = '#ffffff'; // আউটপুট আসার পর সাদা রঙ
-                consoleOutput.innerHTML = `&gt; Output:<br>${result.output.trim()}`;
-            } else if (result.error) {
-                const formattedError = result.error.replace(/\n/g, '<br>');
-                consoleOutput.style.color = '#ff6b6b';
-                consoleOutput.innerHTML = `&gt; Error:<br>${formattedError}`;
-            } else {
-                consoleOutput.style.color = '#ffffff';
-                consoleOutput.innerHTML = `&gt; Program finished with no output.`;
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+
+            if (msg.type === 'output' || msg.type === 'error') {
+                if (msg.type === 'error') consoleOutput.style.color = '#ff6b6b';
+                else consoleOutput.style.color = '#ffffff';
+
+                consoleOutput.innerText += msg.text;
+                inputStartPos = consoleOutput.innerText.length;
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
             }
-        } catch (error) {
+            else if (msg.type === 'exit') {
+                consoleOutput.innerText += `\n> Process exited with code ${msg.code}.`;
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+            }
+        };
+
+        ws.onerror = () => {
             consoleOutput.style.color = '#ff6b6b';
-            if (error.name === 'AbortError') {
-                consoleOutput.innerHTML = `&gt; Execution stopped by user.`;
-            } else {
-                consoleOutput.innerHTML = `&gt; Connection Error: Unable to reach backend server.<br>${error.message}`;
-            }
-        } finally {
-            currentAbortController = null;
+            consoleOutput.innerText = `> Connection Error: Unable to reach WebSocket server.`;
+        };
+    });
+
+    // Send user input on Enter key if input() is used in code
+    consoleOutput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && ws && ws.readyState === WebSocket.OPEN) {
+            e.preventDefault();
+
+            const currentText = consoleOutput.innerText;
+            const userInput = currentText.substring(inputStartPos);
+
+            consoleOutput.innerText += '\n';
+            inputStartPos = consoleOutput.innerText.length;
+
+            ws.send(JSON.stringify({ type: 'input', text: userInput }));
         }
     });
 
@@ -93,19 +106,23 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             consoleWrapper.classList.remove('hidden', 'collapsed');
             consoleOutput.style.color = '#f39c12';
-            consoleOutput.innerHTML = `&gt; Debugging mode active...<br>&gt; Syntax check passed.`;
+            consoleOutput.innerText = `> Debugging mode active...\n> Syntax check passed.`;
         });
     }
 
     if (stopBtn) {
         stopBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            if (currentAbortController) {
-                currentAbortController.abort();
+            if (ws) {
+                ws.close();
+                ws = null;
+                consoleWrapper.classList.remove('hidden', 'collapsed');
+                consoleOutput.style.color = '#ff6b6b';
+                consoleOutput.innerText += `\n> Execution stopped by user.`;
             } else {
                 consoleWrapper.classList.remove('hidden', 'collapsed');
                 consoleOutput.style.color = '#ff6b6b';
-                consoleOutput.innerHTML = `&gt; No active process to stop.`;
+                consoleOutput.innerText = `> No active process to stop.`;
             }
         });
     }
@@ -184,6 +201,5 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     codeArea.addEventListener('input', updateLineNumbers);
-
     updateLineNumbers();
 });

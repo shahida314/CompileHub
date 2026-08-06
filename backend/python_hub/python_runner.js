@@ -2,41 +2,46 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-function runPythonCode(code, callback) {
+// Interactive Python runner for WebSockets
+function runPythonInteractive(ws, code) {
     const tempDir = path.join(__dirname, 'tests');
     if (!fs.existsSync(tempDir)) {
         fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    const tempPath = path.join(tempDir, 'temp_code.py');
+    const tempPath = path.join(tempDir, `temp_${Date.now()}.py`);
     fs.writeFileSync(tempPath, code);
 
-    // exec এর পরিবর্তে spawn ব্যবহার করা হলো যাতে লাইভ ইনপুট/আউটপুট কাজ করে
-    const pythonProcess = spawn('python', [tempPath]);
+    // Use -u flag for unbuffered output
+    const pythonProcess = spawn('python', ['-u', tempPath]);
 
-    let stdoutData = '';
-    let stderrData = '';
-
+    // Send stdout data to client live
     pythonProcess.stdout.on('data', (data) => {
-        stdoutData += data.toString();
-        // টার্মিনালে লাইভ আউটপুট দেখতে চাইলে
-        process.stdout.write(data);
+        ws.send(JSON.stringify({ type: 'output', text: data.toString() }));
     });
 
+    // Send stderr data to client live
     pythonProcess.stderr.on('data', (data) => {
-        stderrData += data.toString();
-        process.stderr.write(data);
+        ws.send(JSON.stringify({ type: 'error', text: data.toString() }));
     });
 
-    pythonProcess.on('close', (code) => {
+    // Clean up temp file and notify client on close
+    pythonProcess.on('close', (codeExit) => {
         if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        ws.send(JSON.stringify({ type: 'exit', code: codeExit }));
+    });
 
-        if (code !== 0 || stderrData) {
-            callback({ error: stderrData || `Process exited with code ${code}` });
-        } else {
-            callback({ output: stdoutData });
+    // Handle user input from frontend terminal
+    ws.on('message', (message) => {
+        try {
+            const msg = JSON.parse(message);
+            if (msg.type === 'input') {
+                pythonProcess.stdin.write(msg.text + '\n');
+            }
+        } catch (err) {
+            console.error('Invalid message format', err);
         }
     });
 }
 
-module.exports = { runPythonCode };
+module.exports = { runPythonInteractive };

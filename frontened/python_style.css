@@ -125,7 +125,7 @@ body {
     max-height: 70vh;
 }
 
-/* Drag handle sits on top border of the terminal, like a real IDE */
+/* Drag handle sits on top border of the terminal */
 .console-resize-handle {
     position: absolute;
     top: -4px;
@@ -191,6 +191,7 @@ body {
     flex: 1;
     overflow-y: auto;
     white-space: pre-wrap;
+    outline: none;
 }
 
 .console-wrapper.collapsed {
