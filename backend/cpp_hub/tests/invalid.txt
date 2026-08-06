@@ -1,0 +1,9 @@
+#include <iostream>
+
+int main() {
+    int x;
+    x = 5;
+    bool b = 5 + 3.2;
+    cout(z);
+    return 0;
+}
