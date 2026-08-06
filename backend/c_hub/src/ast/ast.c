@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// AST Node Types (matching parser.y)
 typedef enum
 {
     NODE_STMT_LIST,
@@ -10,13 +9,14 @@ typedef enum
     NODE_ASSIGN,
     NODE_IF,
     NODE_WHILE,
+    NODE_FOR,
     NODE_PRINTF,
+    NODE_SCANF,
     NODE_BINOP,
     NODE_VAR,
     NODE_NUM
 } NodeType;
 
-// AST Node Structure (matching parser.y)
 typedef struct ASTNode
 {
     NodeType type;
@@ -25,10 +25,10 @@ typedef struct ASTNode
     int op;
     struct ASTNode *left;
     struct ASTNode *right;
+    struct ASTNode *third;
     struct ASTNode *next;
 } ASTNode;
 
-// Function to Create Simple AST Node (used by parser.y)
 ASTNode *create_node(NodeType type)
 {
     ASTNode *node = (ASTNode *)calloc(1, sizeof(ASTNode));
@@ -41,7 +41,6 @@ ASTNode *create_node(NodeType type)
     return node;
 }
 
-// Function to Create Binary Operation Node (used by parser.y)
 ASTNode *create_binop(int op, ASTNode *left, ASTNode *right)
 {
     ASTNode *node = create_node(NODE_BINOP);
@@ -51,13 +50,13 @@ ASTNode *create_binop(int op, ASTNode *left, ASTNode *right)
     return node;
 }
 
-// Function to Free AST Memory
 void free_ast(ASTNode *node)
 {
     if (!node)
         return;
     free_ast(node->left);
     free_ast(node->right);
+    free_ast(node->third);
     free_ast(node->next);
     if (node->str_val)
         free(node->str_val);

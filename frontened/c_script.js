@@ -16,12 +16,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
     const resizeHandle = document.getElementById('consoleResizeHandle');
 
-    const C_BACKEND_URL = 'http://localhost:5000/api/compile/c';
-    let currentAbortController = null;
+    let currentWebSocket = null;
+    let inputStartPos = 0;
 
     codeArea.value = defaultCCode;
     updateLineNumbers();
 
+    // Initial clean terminal text matching C console style
+    consoleOutput.style.color = '#27ae60';
+    consoleOutput.innerText = `> Initializing C Console...`;
+
+    // Update editor line numbers based on code text height
     function updateLineNumbers() {
         const lines = codeArea.value.split('\n').length;
         let lineHTML = '';
@@ -31,81 +36,116 @@ document.addEventListener('DOMContentLoaded', () => {
         lineNumbers.innerHTML = lineHTML;
     }
 
+    // Sync line numbers scroll with code textarea scroll
     codeArea.addEventListener('scroll', () => {
         lineNumbers.scrollTop = codeArea.scrollTop;
     });
 
+    // Handle language navigation dropdown change
     languageSelect.addEventListener('change', () => {
         const selected = languageSelect.value;
         if (selected === 'cpp') window.location.href = 'cpp_ui.html';
         else if (selected === 'java') window.location.href = 'java_ui.html';
         else if (selected === 'python') window.location.href = 'python_ui.html';
+        else if (selected === 'c') window.location.href = 'c_ui.html';
     });
 
-    runBtn.addEventListener('click', async (e) => {
+    // Run C code button event listener (WebSocket-based interactive execution for scanf support)
+    runBtn.addEventListener('click', (e) => {
         e.preventDefault();
 
         consoleWrapper.classList.remove('hidden', 'collapsed');
         consoleOutput.style.color = '#ffffff';
-        consoleOutput.innerHTML = `&gt; Compiling and executing C code...<br>&gt; `;
+        consoleOutput.innerText = ``;
 
-        currentAbortController = new AbortController();
+        inputStartPos = 0;
 
-        try {
-            const response = await fetch(C_BACKEND_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: codeArea.value }),
-                signal: currentAbortController.signal
-            });
+        // Close existing WebSocket connection if active
+        if (currentWebSocket) {
+            currentWebSocket.close();
+        }
 
-            const result = await response.json();
+        // Connect to WebSocket server
+        currentWebSocket = new WebSocket('ws://localhost:5000');
 
-            if (result.output) {
-                consoleOutput.style.color = '#ffffff';
-                consoleOutput.innerHTML = `&gt; Output:<br>${result.output.trim()}`;
-            } else if (result.error) {
-                const formattedError = result.error.replace(/\n/g, '<br>');
-                consoleOutput.style.color = '#e74c3c';
-                consoleOutput.innerHTML = `&gt; Error:<br>${formattedError}`;
-            } else {
-                consoleOutput.style.color = '#ffffff';
-                consoleOutput.innerHTML = `&gt; Process finished with no output.`;
+        currentWebSocket.onopen = () => {
+            currentWebSocket.send(JSON.stringify({
+                type: 'start_c',
+                code: codeArea.value
+            }));
+        };
+
+        currentWebSocket.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+
+            if (msg.type === 'output' || msg.type === 'error') {
+                if (msg.type === 'error') {
+                    consoleOutput.style.color = '#e74c3c';
+                } else {
+                    consoleOutput.style.color = '#ffffff';
+                }
+                consoleOutput.innerText += msg.data;
+                inputStartPos = consoleOutput.innerText.length;
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+            } else if (msg.type === 'close') {
+                consoleOutput.innerText += `\n> Process exited with code ${msg.exitCode}.`;
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
             }
-        } catch (error) {
+        };
+
+        currentWebSocket.onerror = () => {
             consoleOutput.style.color = '#e74c3c';
-            if (error.name === 'AbortError') {
-                consoleOutput.innerHTML = `&gt; Execution stopped by user.`;
-            } else {
-                consoleOutput.innerHTML = `&gt; Connection Error: Unable to reach backend server.<br>${error.message}`;
-            }
-        } finally {
-            currentAbortController = null;
+            consoleOutput.innerText += `\n> WebSocket Connection Error.`;
+        };
+    });
+
+    // Handle terminal keyboard input (like Python) for scanf support
+    consoleOutput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && currentWebSocket && currentWebSocket.readyState === WebSocket.OPEN) {
+            e.preventDefault();
+
+            const currentText = consoleOutput.innerText;
+            const userInput = currentText.substring(inputStartPos);
+
+            consoleOutput.innerText += '\n';
+            inputStartPos = consoleOutput.innerText.length;
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+
+            currentWebSocket.send(JSON.stringify({
+                type: 'input',
+                data: userInput
+            }));
         }
     });
 
+    // Debug button click event
     if (debugBtn) {
         debugBtn.addEventListener('click', (e) => {
             e.preventDefault();
             consoleWrapper.classList.remove('hidden', 'collapsed');
             consoleOutput.style.color = '#f39c12';
-            consoleOutput.innerHTML = `&gt; Debugging mode active...<br>&gt; Syntax check passed.`;
+            consoleOutput.innerText = `> Debugging mode active...\n> Syntax check passed.`;
         });
     }
 
+    // Stop execution button event
     if (stopBtn) {
         stopBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            if (currentAbortController) {
-                currentAbortController.abort();
+            if (currentWebSocket && currentWebSocket.readyState === WebSocket.OPEN) {
+                currentWebSocket.send(JSON.stringify({ type: 'stop' }));
+                currentWebSocket.close();
+                consoleOutput.style.color = '#e74c3c';
+                consoleOutput.innerText += `\n> Execution stopped by user.`;
             } else {
                 consoleWrapper.classList.remove('hidden', 'collapsed');
                 consoleOutput.style.color = '#e74c3c';
-                consoleOutput.innerHTML = `&gt; No active process to stop.`;
+                consoleOutput.innerText = `> No active process to stop.`;
             }
         });
     }
 
+    // Share IDE link button event
     if (shareBtn) {
         shareBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -114,6 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Save code as .c file button event
     if (saveBtn) {
         saveBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -126,6 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Keyboard shortcut (Ctrl + `) to toggle terminal visibility
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === '`') {
             e.preventDefault();
@@ -134,6 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Terminal minimize/expand toggle controls
     if (toggleTerminalBtn) {
         toggleTerminalBtn.addEventListener('click', () => consoleWrapper.classList.toggle('collapsed'));
     }
@@ -141,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
         closeTerminalBtn.addEventListener('click', () => consoleWrapper.classList.add('hidden'));
     }
 
-    // Terminal resize logic
+    // Terminal resize logic using mouse drag
     let isResizing = false;
     let startY = 0;
     let startHeight = 0;
@@ -179,6 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Update line numbers dynamically when typing code
     codeArea.addEventListener('input', updateLineNumbers);
     updateLineNumbers();
 });

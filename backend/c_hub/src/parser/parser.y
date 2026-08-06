@@ -20,7 +20,9 @@ typedef enum {
     NODE_ASSIGN, 
     NODE_IF, 
     NODE_WHILE, 
+    NODE_FOR,
     NODE_PRINTF, 
+    NODE_SCANF,
     NODE_BINOP, 
     NODE_VAR, 
     NODE_NUM,
@@ -35,6 +37,7 @@ typedef struct ASTNode {
     int op;
     struct ASTNode *left;
     struct ASTNode *right;
+    struct ASTNode *third;
     struct ASTNode *next;
 } ASTNode;
 
@@ -72,7 +75,6 @@ Function* get_function_obj(char *name) {
     }
     return NULL;
 }
-
 %}
 
 %union {
@@ -82,16 +84,16 @@ Function* get_function_obj(char *name) {
     struct ASTNode* node;
 }
 
-%token INCLUDE_STDIO MAIN RETURN PRINTF
-%token INT FLOAT CHAR BOOL IF ELSE WHILE PRINT TRUE FALSE
+%token INCLUDE_STDIO MAIN RETURN PRINTF SCANF
+%token INT FLOAT CHAR BOOL IF ELSE WHILE FOR TRUE FALSE
 %token <str_val> IDENTIFIER STRING_LITERAL
 %token <int_val> INT_LITERAL
 %token <float_val> FLOAT_LITERAL
-%token ASSIGN PLUS MINUS MULT DIV MOD
+%token ASSIGN PLUS MINUS MULT DIV MOD INC DEC
 %token EQ NEQ LT GT LE GE AND OR NOT
-%token SEMICOLON LBRACE RBRACE LPAREN RPAREN COMMA
+%token SEMICOLON LBRACE RBRACE LPAREN RPAREN COMMA AMPERSAND
 
-%type <node> statement statement_list declaration_stmt assignment_stmt if_stmt while_stmt printf_stmt block_stmt expression expression_list function_def function_call return_stmt function_list_all program includes identifier_list type_spec
+%type <node> statement statement_list declaration_stmt assignment_stmt if_stmt while_stmt for_stmt printf_stmt scanf_stmt block_stmt expression expression_list function_def function_call return_stmt function_list_all program includes identifier_list type_spec
 
 %left OR
 %left AND
@@ -191,7 +193,9 @@ statement:
     | assignment_stmt
     | if_stmt
     | while_stmt
+    | for_stmt
     | printf_stmt
+    | scanf_stmt
     | block_stmt
     | function_call SEMICOLON { $$ = $1; }
     ;
@@ -248,6 +252,26 @@ assignment_stmt:
         n->left = $3;
         $$ = n;
     }
+    | IDENTIFIER INC SEMICOLON {
+        ASTNode *n = create_node(NODE_ASSIGN);
+        n->str_val = $1;
+        ASTNode *var_node = create_node(NODE_VAR);
+        var_node->str_val = strdup($1);
+        ASTNode *one_node = create_node(NODE_NUM);
+        one_node->int_val = 1;
+        n->left = create_binop(PLUS, var_node, one_node);
+        $$ = n;
+    }
+    | IDENTIFIER DEC SEMICOLON {
+        ASTNode *n = create_node(NODE_ASSIGN);
+        n->str_val = $1;
+        ASTNode *var_node = create_node(NODE_VAR);
+        var_node->str_val = strdup($1);
+        ASTNode *one_node = create_node(NODE_NUM);
+        one_node->int_val = 1;
+        n->left = create_binop(MINUS, var_node, one_node);
+        $$ = n;
+    }
     ;
 
 if_stmt:
@@ -286,6 +310,25 @@ while_stmt:
     }
     ;
 
+for_stmt:
+    FOR LPAREN assignment_stmt expression SEMICOLON expression RPAREN statement {
+        ASTNode *n = create_node(NODE_FOR);
+        n->left = $3;
+        n->right = $4;
+        n->third = $6;
+        n->next = $8;
+        $$ = n;
+    }
+    | FOR LPAREN declaration_stmt expression SEMICOLON expression RPAREN statement {
+        ASTNode *n = create_node(NODE_FOR);
+        n->left = $3;
+        n->right = $4;
+        n->third = $6;
+        n->next = $8;
+        $$ = n;
+    }
+    ;
+
 printf_stmt:
     PRINTF LPAREN STRING_LITERAL RPAREN SEMICOLON {
         ASTNode *n = create_node(NODE_PRINTF);
@@ -303,6 +346,14 @@ printf_stmt:
         ASTNode *n = create_node(NODE_PRINTF);
         n->str_val = NULL; 
         n->left = $3;
+        $$ = n;
+    }
+    ;
+
+scanf_stmt:
+    SCANF LPAREN STRING_LITERAL COMMA AMPERSAND IDENTIFIER RPAREN SEMICOLON {
+        ASTNode *n = create_node(NODE_SCANF);
+        n->str_val = $6;
         $$ = n;
     }
     ;
@@ -354,18 +405,10 @@ int eval_ast(ASTNode *node) {
     if (!node) return 0;
     if (node->type == NODE_NUM) return node->int_val;
     if (node->type == NODE_VAR) return get_variable_value(node->str_val);
-    if (node->type == NODE_FUNC_CALL) {
-        Function *f = get_function_obj(node->str_val);
-        if (f) {
-            if (f->param_name && node->left) {
-                int arg_val = eval_ast(node->left);
-                set_variable_value(f->param_name, arg_val);
-            }
-            if (f->body) {
-                execute_ast(f->body);
-            }
-        }
-        return 0;
+    if (node->type == NODE_ASSIGN) {
+        int val = eval_ast(node->left);
+        set_variable_value(node->str_val, val);
+        return val;
     }
     if (node->type == NODE_BINOP) {
         int l = eval_ast(node->left);
@@ -403,38 +446,49 @@ void execute_ast(ASTNode *node) {
                 } else if (curr->str_val != NULL) {
                     char *fmt = curr->str_val;
                     int len = strlen(fmt);
-                    char temp[256];
+                    char temp[512];
                     int j = 0;
+                    
                     for (int i = 0; i < len; i++) {
-                        if (fmt[i] != '"') {
-                            temp[j++] = fmt[i];
+                        if (fmt[i] == '"') continue;
+                        if (fmt[i] == '\\' && i + 1 < len) {
+                            if (fmt[i + 1] == 'n') {
+                                temp[j++] = '\n';
+                                i++;
+                                continue;
+                            } else if (fmt[i + 1] == 't') {
+                                temp[j++] = '\t';
+                                i++;
+                                continue;
+                            }
                         }
+                        temp[j++] = fmt[i];
                     }
                     temp[j] = '\0';
                     
                     if (curr->left) {
                         int val = eval_ast(curr->left);
-                        char buffer[256];
-                        snprintf(buffer, sizeof(buffer), temp, val);
-                        printf("%s\n", buffer);
+                        printf(temp, val);
                     } else {
-                        printf("%s\n", temp);
+                        printf("%s", temp);
                     }
+                }
+                break;
+            }
+            case NODE_SCANF: {
+                int val = 0;
+                if (scanf("%d", &val) == 1) {
+                    set_variable_value(curr->str_val, val);
                 }
                 break;
             }
             case NODE_IF: {
                 int cond = eval_ast(curr->left);
                 ASTNode *branches = curr->right;
-                
                 if (cond) {
-                    if (branches->left != NULL) {
-                        execute_ast(branches->left);
-                    }
+                    if (branches->left != NULL) execute_ast(branches->left);
                 } else {
-                    if (branches->right != NULL) {
-                        execute_ast(branches->right);
-                    }
+                    if (branches->right != NULL) execute_ast(branches->right);
                 }
                 break;
             }
@@ -444,16 +498,11 @@ void execute_ast(ASTNode *node) {
                 }
                 break;
             }
-            case NODE_FUNC_CALL: {
-                Function *f = get_function_obj(curr->str_val);
-                if (f) {
-                    if (f->param_name && curr->left) {
-                        int arg_val = eval_ast(curr->left);
-                        set_variable_value(f->param_name, arg_val);
-                    }
-                    if (f->body) {
-                        execute_ast(f->body);
-                    }
+            case NODE_FOR: {
+                execute_ast(curr->left); // Initialization
+                while (eval_ast(curr->right)) { // Condition
+                    execute_ast(curr->next); // Body
+                    execute_ast(curr->third); // Increment/Decrement
                 }
                 break;
             }
@@ -462,7 +511,11 @@ void execute_ast(ASTNode *node) {
             default:
                 break;
         }
-        curr = curr->next;
+        if (curr->type != NODE_FOR) {
+            curr = curr->next;
+        } else {
+            curr = curr->next ? curr->next->next : NULL; // For লুপের ক্ষেত্রে নেক্সট হ্যান্ডেল করা
+        }
     }
 }
 
@@ -471,6 +524,7 @@ void yyerror(const char *s) {
 }
 
 int main(int argc, char **argv) {
+    init_symbol_table();
     if (argc > 1) {
         FILE *f = fopen(argv[1], "r");
         if (!f) {

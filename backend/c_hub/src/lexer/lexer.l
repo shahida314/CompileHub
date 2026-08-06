@@ -25,8 +25,10 @@ void yyerror(const char *s);
 "if"        { return IF; }
 "else"      { return ELSE; }
 "while"     { return WHILE; }
+"for"       { return FOR; }
 "return"    { return RETURN; }
 "printf"    { return PRINTF; }
+"scanf"     { return SCANF; }
 "true"      { return TRUE; }
 "false"     { return FALSE; }
 
@@ -45,9 +47,12 @@ void yyerror(const char *s);
 "&&"        { return AND; }
 "||"        { return OR; }
 "!"         { return NOT; }
+"++"        { return INC; }
+"--"        { return DEC; }
 
 ";"         { return SEMICOLON; }
 ","         { return COMMA; }
+"&"         { return AMPERSAND; }
 "{"         { return LBRACE; }
 "}"         { return RBRACE; }
 "("         { return LPAREN; }
@@ -68,7 +73,7 @@ void yyerror(const char *s);
     return INT_LITERAL;
 }
 
-\"([^\""\n])*\" {
+\"([^\"\n])*\" {
     yylval.str_val = strdup(yytext);
     return STRING_LITERAL;
 }

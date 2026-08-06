@@ -4,7 +4,7 @@ const path = require('path');
 const http = require('http');
 const WebSocket = require('ws');
 
-const { runCCode } = require('./c_hub/c_runner');
+const { runCInteractive } = require('./c_hub/c_runner');
 const { runCppCode } = require('./cpp_hub/cpp_runner');
 const { runJavaCompiler } = require('./java_hub/java_runner');
 const { runPythonInteractive } = require('./python_hub/python_runner');
@@ -16,25 +16,23 @@ app.use(express.json());
 // Serve frontend static files
 app.use(express.static(path.join(__dirname, '../frontened')));
 
-// Create HTTP and WebSocket server for Real-time Python
+// Create HTTP and WebSocket server for real-time execution
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Handle WebSocket connection for real-time Python input/output
+// Handle WebSocket connections for Python and C interactive sessions
 wss.on('connection', (ws) => {
     ws.on('message', (message) => {
-        const data = JSON.parse(message);
-        if (data.type === 'start') {
-            runPythonInteractive(ws, data.code);
+        try {
+            const data = JSON.parse(message);
+            if (data.type === 'start') {
+                runPythonInteractive(ws, data.code);
+            } else if (data.type === 'start_c') {
+                runCInteractive(ws, data.code);
+            }
+        } catch (e) {
+            console.error(e);
         }
-    });
-});
-
-// C Compiler API Endpoint
-app.post('/api/compile/c', (req, res) => {
-    const { code } = req.body;
-    runCCode(code, (result) => {
-        res.json(result);
     });
 });
 
