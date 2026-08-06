@@ -1,26 +1,41 @@
-const { exec } = require('child_process');
+const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-function runJavaCompiler(code, callback) {
-    const tempFilePath = path.join(__dirname, 'temp_input.java');
-    
-    
+function runJavaCompilerInteractive(code, { onOutput, onError, onExit }) {
+    const tempFilePath = path.join(
+        __dirname,
+        `temp_${Date.now()}_${Math.floor(Math.random() * 10000)}.java`
+    );
+
     fs.writeFileSync(tempFilePath, code);
 
     const executablePath = path.join(__dirname, 'java_compiler.exe');
-    exec(`"${executablePath}" "${tempFilePath}"`, (error, stdout, stderr) => {
-      
+    const child = spawn(executablePath, [tempFilePath]);
+
+    child.stdout.on('data', (data) => {
+        onOutput(data.toString());
+    });
+
+    child.stderr.on('data', (data) => {
+        onError(data.toString());
+    });
+
+    child.on('close', (exitCode) => {
         if (fs.existsSync(tempFilePath)) {
             fs.unlinkSync(tempFilePath);
         }
-
-        if (error) {
-            callback(stderr || error.message);
-            return;
-        }
-        callback(stdout);
+        onExit(exitCode);
     });
+
+    child.on('error', (err) => {
+        onError(err.message);
+        if (fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+        }
+    });
+
+    return child;
 }
 
-module.exports = { runJavaCompiler };
+module.exports = { runJavaCompilerInteractive };

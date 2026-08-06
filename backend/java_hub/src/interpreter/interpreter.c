@@ -2,9 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+void print_processed_string(const char *str);
+
 typedef enum { NODE_DECL, NODE_ASSIGN, NODE_BINOP, NODE_UNOP, NODE_VAR, NODE_NUM,
                NODE_IF, NODE_WHILE, NODE_PRINT, NODE_BLOCK,
-               NODE_STR, NODE_CALL, NODE_RETURN } NodeType;
+               NODE_STR, NODE_CALL, NODE_RETURN, NODE_INC } NodeType;
 
 typedef struct ASTNode {
     NodeType type;
@@ -108,11 +110,47 @@ const char* get_runtime_var_str(const char *name) {
     return "";
 }
 
+double scanner_read_number(void) {
+    double v = 0;
+    if (scanf(" %lf", &v) != 1) v = 0;
+    return v;
+}
+
+int scanner_read_bool(void) {
+    char buf[16] = {0};
+    if (scanf(" %15s", buf) != 1) return 0;
+    return strcmp(buf, "true") == 0;
+}
+
+const char* scanner_read_line(void) {
+    static char buf[256];
+    buf[0] = '\0';
+    int c = getchar();
+    while (c == '\n' || c == '\r') c = getchar();
+    int i = 0;
+    while (c != EOF && c != '\n' && i < 255) {
+        buf[i++] = (char)c;
+        c = getchar();
+    }
+    buf[i] = '\0';
+    return buf;
+}
+
+const char* scanner_read_token(void) {
+    static char buf[256];
+    if (scanf(" %255s", buf) != 1) buf[0] = '\0';
+    return buf;
+}
+
 int is_string_node(ASTNode *node) {
     if (!node) return 0;
     if (node->type == NODE_STR) return 1;
     if (node->type == NODE_VAR) {
         return strcmp(get_runtime_var_type(node->value), "String") == 0;
+    }
+    if (node->type == NODE_CALL &&
+        (strcmp(node->value, "nextLine") == 0 || strcmp(node->value, "next") == 0)) {
+        return 1;
     }
     return 0;
 }
@@ -121,6 +159,10 @@ const char* get_expr_string(ASTNode *node) {
     if (!node) return "";
     if (node->type == NODE_STR) return node->value;
     if (node->type == NODE_VAR) return get_runtime_var_str(node->value);
+    if (node->type == NODE_CALL) {
+        if (strcmp(node->value, "nextLine") == 0) return scanner_read_line();
+        if (strcmp(node->value, "next") == 0) return scanner_read_token();
+    }
     return "";
 }
 
@@ -140,7 +182,21 @@ double eval_expr_rt(ASTNode *node) {
             return get_runtime_var(node->value);
 
         case NODE_CALL:
+            if (strcmp(node->value, "nextInt") == 0 ||
+                strcmp(node->value, "nextDouble") == 0 ||
+                strcmp(node->value, "nextFloat") == 0) {
+                return scanner_read_number();
+            }
+            if (strcmp(node->value, "nextBoolean") == 0) {
+                return scanner_read_bool();
+            }
             return call_function(node->value, node->left);
+
+        case NODE_INC: {
+            double val = get_runtime_var(node->value);
+            set_runtime_var(node->value, val + 1);
+            return val + 1;
+        }
 
         case NODE_UNOP:
             l = eval_expr_rt(node->left);
@@ -183,6 +239,7 @@ void print_runtime_value(ASTNode *expr_node, double val) {
     } else {
         printf("%ld\n", (long)val);
     }
+    fflush(stdout); // বাফার ক্লিয়ার করে দ্রুত আউটপুট প্রেরণের জন্য
 }
 
 void exec_stmt_list_rt(ASTNode *node);
@@ -194,6 +251,7 @@ double call_function(const char *name, ASTNode *args) {
 
     if (!body) {
         fprintf(stderr, "Runtime Error: function '%s' not found\n", name);
+        fflush(stderr);
         return 0;
     }
 
@@ -265,14 +323,20 @@ void exec_stmt_rt(ASTNode *node) {
             }
             break;
 
-        case NODE_PRINT:
-            if (is_string_node(node->left)) {
-                printf("%s\n", get_expr_string(node->left));
-            } else {
-                val = eval_expr_rt(node->left);
-                print_runtime_value(node->left, val);
-            }
+        case NODE_INC:
+            eval_expr_rt(node);
             break;
+
+   case NODE_PRINT:
+    if (is_string_node(node->left)) {
+        print_processed_string(get_expr_string(node->left));
+    } else {
+        val = eval_expr_rt(node->left);
+        print_runtime_value(node->left, val);
+        printf("\n"); 
+    }
+    fflush(stdout);
+    break;
 
         case NODE_BLOCK:
             exec_stmt_list_rt(node->left);
@@ -306,7 +370,20 @@ void exec_stmt_rt(ASTNode *node) {
             break;
     }
 }
-
+void print_processed_string(const char *str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        if (str[i] == '\\' && str[i+1] == 'n') {
+            printf("\n");
+            i++; // skip 'n'
+        } else if (str[i] == '\\' && str[i+1] == 't') {
+            printf("\t");
+            i++; // skip 't'
+        } else {
+            putchar(str[i]);
+        }
+    }
+    fflush(stdout);
+}
 void exec_stmt_list_rt(ASTNode *node) {
     while (node && !returning) {
         exec_stmt_rt(node);
@@ -339,6 +416,10 @@ extern FILE *yyin;
 extern ASTNode *root;
 
 int main(int argc, char *argv[]) {
+    // Standard Output এবং Error Buffering নিষ্ক্রিয় করা হলো
+    setbuf(stdout, NULL);
+    setbuf(stderr, NULL);
+
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <source_file>\n", argv[0]);
         return 1;

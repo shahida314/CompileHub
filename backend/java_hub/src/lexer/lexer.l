@@ -21,6 +21,7 @@ void yyerror(const char *s);
 "if"        { return IF; }
 "else"      { return ELSE; }
 "while"     { return WHILE; }
+"for"       { return FOR; }
 "print"     { return PRINT; }
 "true"      { return TRUE; }
 "false"     { return FALSE; }
@@ -32,6 +33,8 @@ void yyerror(const char *s);
 "String"    { return STRING_TYPE; }
 "System"    { return SYSTEM_KW; }
 "return"    { return RETURN; }
+"new"       { return NEW; }
+"Scanner"   { return SCANNER; }
 
 "+"         { return PLUS; }
 "-"         { return MINUS; }
@@ -39,7 +42,7 @@ void yyerror(const char *s);
 "/"         { return DIV; }
 "%"         { return MOD; }
 "="         { return ASSIGN; }
-
+"++"         { return INC; }
 "=="        { return EQ; }
 "!="        { return NEQ; }
 "<"         { return LT; }

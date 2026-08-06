@@ -113,16 +113,51 @@ body {
     tab-size: 4;
 }
 
-/* Terminal Styling */
+
 .console-wrapper {
-    position: relative;
     background-color: #000000;
-    border-top: 1px solid #333;
+    color: #ffffff;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
     display: flex;
     flex-direction: column;
-    height: 220px;
-    min-height: 38px;
-    max-height: 70vh;
+    height: 200px;
+    border-top: 1px solid #333;
+}
+
+.console-output {
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background-color: #000000;
+    color: #ffffff;
+}
+
+
+.prompt-symbol {
+    color: #ffffff !important;
+    font-weight: bold;
+    margin-right: 6px;
+}
+
+
+.inline-input-wrapper {
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+}
+
+.inline-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #ffffff;
+    font-family: inherit;
+    font-size: inherit;
+    width: 80%;
+    caret-color: #ffffff;
 }
 
 /* Drag handle sits on top border of the terminal */
@@ -203,4 +238,38 @@ body {
 
 .console-wrapper.hidden {
     display: none;
+}
+
+
+.console-body {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.console-input-line {
+    display: flex;
+    align-items: center;
+    padding: 2px 10px;
+    flex-shrink: 0;
+}
+
+.console-prompt {
+    color: #27ae60;
+    margin-right: 6px;
+    font-family: 'Consolas', monospace;
+}
+
+.terminal-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e0e0e0;
+    font-family: 'Consolas', monospace;
+    font-size: 14px;
+}
+
+.terminal-input:disabled {
+    opacity: 0.4;
 }

@@ -40,20 +40,22 @@
         <textarea id="codeArea" class="code-area" spellcheck="false"></textarea>
     </main>
 
-    <!-- Terminal -->
-    <footer class="console-wrapper" id="consoleWrapper">
-        <!-- Drag handle to resize terminal height -->
-        <div class="console-resize-handle" id="consoleResizeHandle"></div>
+    <!-- Terminal (এখন input + output একই জায়গায়) -->
+<footer class="console-wrapper" id="consoleWrapper">
+    <!-- Drag handle to resize terminal height -->
+    <div class="console-resize-handle" id="consoleResizeHandle"></div>
 
-        <div class="console-header">
-            <span class="console-title">TERMINAL (Press Ctrl+` to toggle)</span>
-            <div class="console-actions">
-                <button class="console-btn" id="toggleTerminalBtn" title="Minimize/Maximize">─</button>
-                <button class="console-btn" id="closeTerminalBtn" title="Close Panel">✕</button>
-            </div>
+    <div class="console-header">
+        <span class="console-title">TERMINAL (Press Ctrl+` to toggle)</span>
+        <div class="console-actions">
+            <button class="console-btn" id="toggleTerminalBtn" title="Minimize/Maximize">─</button>
+            <button class="console-btn" id="closeTerminalBtn" title="Close Panel">✕</button>
         </div>
-       <div class="console-container" id="consoleOutput">&gt; Initializing Java Console...</div>
-    </footer>
+    </div>
+
+    <!-- আউটপুট এবং ইনলাইন ইনপুট ফিল্ড দুটোই এই বক্সে থাকবে -->
+    <div class="console-output" id="consoleOutput"></div>
+</footer>
 
     <script src="java_script.js"></script>
 </body>
