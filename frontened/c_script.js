@@ -19,14 +19,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentWebSocket = null;
     let inputStartPos = 0;
 
+    // Load default C template and set line numbers
     codeArea.value = defaultCCode;
     updateLineNumbers();
 
-    // Initial clean terminal text matching C console style
     consoleOutput.style.color = '#27ae60';
-    consoleOutput.innerText = `> Initializing C Console...`;
+    consoleOutput.innerText = `> Ready to compile and run C code...`;
 
-    // Update editor line numbers based on code text height
+    // Update editor line numbers
     function updateLineNumbers() {
         const lines = codeArea.value.split('\n').length;
         let lineHTML = '';
@@ -36,31 +36,30 @@ document.addEventListener('DOMContentLoaded', () => {
         lineNumbers.innerHTML = lineHTML;
     }
 
-    // Sync line numbers scroll with code textarea scroll
     codeArea.addEventListener('scroll', () => {
         lineNumbers.scrollTop = codeArea.scrollTop;
     });
 
-    // Handle language navigation dropdown change
-    languageSelect.addEventListener('change', () => {
-        const selected = languageSelect.value;
-        if (selected === 'cpp') window.location.href = 'cpp_ui.html';
-        else if (selected === 'java') window.location.href = 'java_ui.html';
-        else if (selected === 'python') window.location.href = 'python_ui.html';
-        else if (selected === 'c') window.location.href = 'c_ui.html';
-    });
+    // Language dropdown navigation
+    if (languageSelect) {
+        languageSelect.addEventListener('change', () => {
+            const selected = languageSelect.value;
+            if (selected === 'cpp') window.location.href = 'cpp_ui.html';
+            else if (selected === 'java') window.location.href = 'java_ui.html';
+            else if (selected === 'python') window.location.href = 'python_ui.html';
+            else if (selected === 'c') window.location.href = 'c_ui.html';
+        });
+    }
 
-    // Run C code button event listener (WebSocket-based interactive execution for scanf support)
+    // Run C code via WebSocket (Clean output like Python)
     runBtn.addEventListener('click', (e) => {
         e.preventDefault();
 
         consoleWrapper.classList.remove('hidden', 'collapsed');
         consoleOutput.style.color = '#ffffff';
-        consoleOutput.innerText = ``;
+        consoleOutput.innerText = ``; // অতিরিক্ত লেখা মুছে ফেলা হয়েছে
+        inputStartPos = consoleOutput.innerText.length;
 
-        inputStartPos = 0;
-
-        // Close existing WebSocket connection if active
         if (currentWebSocket) {
             currentWebSocket.close();
         }
@@ -76,30 +75,35 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         currentWebSocket.onmessage = (event) => {
-            const msg = JSON.parse(event.data);
+            try {
+                const msg = JSON.parse(event.data);
 
-            if (msg.type === 'output' || msg.type === 'error') {
-                if (msg.type === 'error') {
-                    consoleOutput.style.color = '#e74c3c';
-                } else {
-                    consoleOutput.style.color = '#ffffff';
+                if (msg.type === 'output' || msg.type === 'error') {
+                    if (msg.type === 'error') {
+                        consoleOutput.style.color = '#e74c3c';
+                    } else {
+                        consoleOutput.style.color = '#ffffff';
+                    }
+                    consoleOutput.innerText += msg.data;
+                    inputStartPos = consoleOutput.innerText.length;
+                    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                } else if (msg.type === 'close') {
+                    consoleOutput.innerText += `\n> Process exited with code ${msg.exitCode}.`;
+                    inputStartPos = consoleOutput.innerText.length;
+                    consoleOutput.scrollTop = consoleOutput.scrollHeight;
                 }
-                consoleOutput.innerText += msg.data;
-                inputStartPos = consoleOutput.innerText.length;
-                consoleOutput.scrollTop = consoleOutput.scrollHeight;
-            } else if (msg.type === 'close') {
-                consoleOutput.innerText += `\n> Process exited with code ${msg.exitCode}.`;
-                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+            } catch (err) {
+                console.error('Error parsing message from server:', err);
             }
         };
 
         currentWebSocket.onerror = () => {
             consoleOutput.style.color = '#e74c3c';
-            consoleOutput.innerText += `\n> WebSocket Connection Error.`;
+            consoleOutput.innerText += `\n> WebSocket Connection Error. Make sure server.js is running.`;
         };
     });
 
-    // Handle terminal keyboard input (like Python) for scanf support
+    // Handle terminal keyboard input (Enter key for scanf)
     consoleOutput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && currentWebSocket && currentWebSocket.readyState === WebSocket.OPEN) {
             e.preventDefault();
@@ -113,12 +117,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             currentWebSocket.send(JSON.stringify({
                 type: 'input',
-                data: userInput
+                data: userInput.trim()
             }));
         }
     });
 
-    // Debug button click event
+    // Debug button
     if (debugBtn) {
         debugBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -128,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Stop execution button event
+    // Stop button
     if (stopBtn) {
         stopBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -145,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Share IDE link button event
+    // Share button
     if (shareBtn) {
         shareBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -154,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Save code as .c file button event
+    // Save button
     if (saveBtn) {
         saveBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -167,7 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Keyboard shortcut (Ctrl + `) to toggle terminal visibility
+    // Terminal toggles and resizing
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === '`') {
             e.preventDefault();
@@ -176,7 +180,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Terminal minimize/expand toggle controls
     if (toggleTerminalBtn) {
         toggleTerminalBtn.addEventListener('click', () => consoleWrapper.classList.toggle('collapsed'));
     }
@@ -184,33 +187,27 @@ document.addEventListener('DOMContentLoaded', () => {
         closeTerminalBtn.addEventListener('click', () => consoleWrapper.classList.add('hidden'));
     }
 
-    // Terminal resize logic using mouse drag
     let isResizing = false;
     let startY = 0;
     let startHeight = 0;
 
-    resizeHandle.addEventListener('mousedown', (e) => {
-        if (consoleWrapper.classList.contains('collapsed') ||
-            consoleWrapper.classList.contains('hidden')) return;
-
-        isResizing = true;
-        startY = e.clientY;
-        startHeight = consoleWrapper.offsetHeight;
-        consoleWrapper.classList.add('resizing');
-        document.body.style.cursor = 'ns-resize';
-        e.preventDefault();
-    });
+    if (resizeHandle) {
+        resizeHandle.addEventListener('mousedown', (e) => {
+            if (consoleWrapper.classList.contains('collapsed') || consoleWrapper.classList.contains('hidden')) return;
+            isResizing = true;
+            startY = e.clientY;
+            startHeight = consoleWrapper.offsetHeight;
+            consoleWrapper.classList.add('resizing');
+            document.body.style.cursor = 'ns-resize';
+            e.preventDefault();
+        });
+    }
 
     document.addEventListener('mousemove', (e) => {
         if (!isResizing) return;
-
         const delta = startY - e.clientY;
         let newHeight = startHeight + delta;
-
-        const minHeight = 80;
-        const maxHeight = window.innerHeight * 0.7;
-        newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
-
+        newHeight = Math.max(80, Math.min(window.innerHeight * 0.7, newHeight));
         consoleWrapper.style.height = `${newHeight}px`;
     });
 
@@ -222,7 +219,5 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Update line numbers dynamically when typing code
     codeArea.addEventListener('input', updateLineNumbers);
-    updateLineNumbers();
 });

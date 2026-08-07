@@ -9,6 +9,7 @@ node_modules/
 backend/**/*.exe
 backend/**/*.o
 backend/**/*.out
+backend/c_hub/temp_*.c
 
 # Flex and Bison runtime generated C files across all hubs
 backend/**/lex.yy.c
