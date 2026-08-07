@@ -22,3 +22,46 @@ public class Main {
         System.out.println(myBool);
     }
 }
+
+
+/*public class Main {
+    public static int add(int x, int y) {
+        return x + y;
+    }
+
+    public static void main(String[] args) {
+        int result = add(5, 7);
+        System.out.println("Sum = " + result);
+    }
+}  */
+
+
+/*import java.util.Scanner;
+public class Main {
+
+    public static void printLabel(String label, float val) {
+        System.out.print(label);
+        System.out.println(val);
+    }
+
+    public static boolean askBoolean(String prompt) {
+        System.out.println(prompt);
+        Scanner scanner = new Scanner(System.in);
+        boolean b = scanner.nextBoolean();
+        return b;
+    }
+
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        float pi = 3.14159f;
+
+        printLabel("pi = ", pi);
+
+        System.out.print("Enter value: ");
+        float v = scanner.nextFloat();
+        printLabel("You entered: ", v);
+
+        boolean b = askBoolean("Enter true/false:");
+        System.out.println("You entered: " + b);
+    }
+}*/

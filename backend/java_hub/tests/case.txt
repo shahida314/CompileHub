@@ -1,0 +1,37 @@
+import java.util.Scanner;
+public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+
+        float pi = 3.14159f;
+        System.out.print("pi = ");
+        System.out.println(pi);   
+
+        System.out.print("Enter value: ");      
+        float v = scanner.nextFloat();           
+        System.out.print("You entered: ");
+        System.out.println(v);
+
+        System.out.println("Enter true/false:"); 
+        boolean b = scanner.nextBoolean();        
+        System.out.println("You entered: " + b);
+    }
+}
+
+
+
+
+/*
+
+pi = 3.14159
+
+Enter value: 5.5
+You entered: 5.5
+
+Enter true/false:
+
+true
+You entered: true
+
+
+*/

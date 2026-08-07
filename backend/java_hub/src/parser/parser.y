@@ -39,8 +39,8 @@ ASTNode *root = NULL;
 %token SEMICOLON COMMA DOT LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET
 %token INC
 
-%type <node> program class_decl member_list member main_method func_decl
-%type <node> param_list param_list_opt
+%type <node> program class_decl member_list member func_decl
+%type <node> param_list param_list_opt param
 %type <node> stmt_list stmt block decl_stmt assign_stmt if_stmt while_stmt func_stmt for_stmt
 %type <node> for_init for_update scanner_decl
 %type <node> print_stmt println_stmt return_stmt call_stmt
@@ -78,14 +78,11 @@ member_list:
         }
     ;
 
+/* main_method আলাদা rule হিসেবে আর নেই — এখন main এবং অন্য যেকোনো ফাংশন
+   একই func_decl rule দিয়ে ধরা পড়ে। এটাই আগের VOID-সম্পর্কিত
+   shift/reduce conflict সম্পূর্ণ দূর করে দেয়। */
 member:
-      main_method   { $$ = $1; }
-    | func_decl     { $$ = $1; }
-    ;
-
-main_method:
-      PUBLIC STATIC VOID IDENTIFIER LPAREN STRING_TYPE LBRACKET RBRACKET IDENTIFIER RPAREN block
-        { $$ = create_node(NODE_BLOCK, "main", $11, NULL); }
+      func_decl     { $$ = $1; }
     ;
 
 func_decl:
@@ -111,18 +108,31 @@ param_list_opt:
     ;
 
 param_list:
+      param {
+            $$ = $1;
+        }
+    | param_list COMMA param {
+            ASTNode *n = $1;
+            while (n->next) n = n->next;
+            n->next = $3;
+            $$ = $1;
+        }
+    ;
+
+/* সাধারণ parameter (int x, float y, String s, ...) এবং main-এর বিশেষ
+   "String[] args" প্যাটার্ন — দুটোই এখন এই একই param rule দিয়ে ধরা পড়ে।
+   STRING_TYPE-এর পরে LBRACKET এলে array-ফর্ম, IDENTIFIER এলে সাধারণ param —
+   এই দুই লুকঅ্যাহেড টোকেন ভিন্ন হওয়ায় parser-এর কোনো conflict হয় না। */
+param:
       type_spec IDENTIFIER {
             ASTNode *n = create_node(NODE_DECL, $2, NULL, NULL);
             strcpy(n->data_type, $1);
             $$ = n;
         }
-    | param_list COMMA type_spec IDENTIFIER {
+    | STRING_TYPE LBRACKET RBRACKET IDENTIFIER {
             ASTNode *n = create_node(NODE_DECL, $4, NULL, NULL);
-            strcpy(n->data_type, $3);
-            ASTNode *p = $1;
-            while (p->next) p = p->next;
-            p->next = n;
-            $$ = $1;
+            strcpy(n->data_type, "String[]");
+            $$ = n;
         }
     ;
 
@@ -256,17 +266,12 @@ func_stmt:
         }
     ;
 
-/* কাস্টম "print" কিওয়ার্ড (Java-এর System.out.print নয়) — newline ছাড়া প্রিন্ট করে */
 print_stmt:
-      PRINT expr SEMICOLON
-        { $$ = create_node(NODE_PRINT, "print", $2, NULL); }
+    PRINT expr SEMICOLON
+    { $$ = create_node(NODE_PRINT, "printnl", $2, NULL); }
     ;
 
-/* System.out.print(...) এবং System.out.println(...) — সব ধরনের কেস কভার করা হলো:
-   ১. argument সহ println/print (আগে থেকেই ছিল)
-   ২. argument ছাড়া println() / print() — খালি parentheses (NEW)
-   lexer.l-এ "print" শব্দটা IDENTIFIER না হয়ে PRINT token হিসেবে আসে বলে
-   PRINT token-এর জন্য আলাদা rule রাখা হয়েছে। */
+
 println_stmt:
       SYSTEM_KW DOT IDENTIFIER DOT IDENTIFIER LPAREN expr RPAREN SEMICOLON
         { $$ = create_node(NODE_PRINT, $5, $7, NULL); }

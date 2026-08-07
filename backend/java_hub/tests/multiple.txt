@@ -1,0 +1,25 @@
+public class Main {
+    public static void main(String[] args) {
+        int x = 5;
+        float y = 2.5f;
+        boolean flag = true;
+        System.out.println("x=" + x + " y=" + y + " flag=" + flag);
+    }
+}
+
+
+
+/*public class Main {
+    public static boolean isEven(int n) {
+        if (n % 2 == 0) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public static void main(String[] args) {
+        boolean result = isEven(8);
+        System.out.println("Is 8 even? " + result);
+    }
+}*/

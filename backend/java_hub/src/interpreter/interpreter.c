@@ -409,8 +409,8 @@ void exec_stmt_rt(ASTNode *node) {
             break;
 
         case NODE_PRINT: {
-            // node->value: "print" (newline ছাড়া) অথবা "println" (newline সহ)
-            int add_newline = (strcmp(node->value, "println") == 0);
+    int add_newline = (strcmp(node->value, "println") == 0 ||
+                        strcmp(node->value, "printnl") == 0);
 
             if (node->left == NULL) {
                 if (add_newline) {
@@ -489,8 +489,8 @@ void run_program(ASTNode *root) {
     ASTNode *main_body = NULL;
 
     while (n) {
-        if (n->type == NODE_BLOCK && strcmp(n->value, "main") == 0) {
-            main_body = n->left;
+        if (n->type == NODE_CALL && strcmp(n->value, "main") == 0) {
+            main_body = n->right;
         } else if (n->type == NODE_CALL && n->right != NULL) {
             register_function(n->value, n->data_type, n->left, n->right);
         }
