@@ -16,14 +16,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
     const resizeHandle = document.getElementById('consoleResizeHandle');
 
-    // ব্যাকএন্ডের সঠিক API URL
     const BACKEND_URL = 'http://localhost:5000/run';
 
     if (codeArea) {
         codeArea.value = defaultCppCode;
     }
 
-    // ১. লাইন নম্বর আপডেট করার ফাংশন
+    // ১. লাইন নম্বর আপডেট
     function updateLineNumbers() {
         if (!codeArea || !lineNumbers) return;
         const lines = codeArea.value.split('\n').length;
@@ -42,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateLineNumbers();
     }
 
-    // ২. ল্যাঙ্গুয়েজ চেঞ্জ করলে নেভিগেশন
+    // ২. ল্যাঙ্গুয়েজ চেঞ্জ
     if (languageSelect) {
         languageSelect.addEventListener('change', () => {
             const selectedLang = languageSelect.value;
@@ -82,8 +81,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 outputHTML = `&gt; Program finished with no output.`;
             }
 
-            // টার্মিনালের নিচে ইনপুট দেওয়ার টেক্সট বক্স বক্স যোগ করা
-            outputHTML += `<br><br>&gt; <input type="text" id="terminalPrompt" placeholder="Type input here and press Enter (if needed)..." style="background:transparent; border:none; color:#00ff00; outline:none; width:80%; font-family:monospace;" autofocus />`;
+            // টার্মিনালের নিচে ইনপুট দেওয়ার ইনপুট ফিল্ড (আগের ইনপুট ভ্যালু সহ রাখা)
+            outputHTML += `<br><br>&gt; <input type="text" id="terminalPrompt" value="${inputData}" placeholder="Type input here and press Enter or click Run..." style="background:transparent; border:none; color:#00ff00; outline:none; width:80%; font-family:monospace;" autofocus />`;
             
             consoleOutput.innerHTML = outputHTML;
 
@@ -96,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // ৪. টার্মিনালে ইনপুট দিয়ে Enter চাপলে পুনরায় এক্সিকিউট হওয়া
+    // ৪. টার্মিনালে ইনপুট ফিল্ডের লিসেনার
     function attachPromptListener() {
         const terminalPrompt = document.getElementById('terminalPrompt');
         if (terminalPrompt) {
@@ -110,10 +109,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 🖐️ ► Run বাটনে ক্লিক করলে প্রথমবারের জন্য রান হওয়া
+    // 🖐️ ► Run বাটনে ক্লিক করলে টার্মিনালের ইনপুটসহ রান হবে!
     if (runBtn) {
         runBtn.addEventListener('click', () => {
-            runCode('');
+            const terminalPrompt = document.getElementById('terminalPrompt');
+            // যদি ইনপুট বক্সে কিছু লেখা থাকে তবে সেটা নেবে, না থাকলে খালি স্ট্রিং পাঠাবে
+            const currentInput = terminalPrompt ? terminalPrompt.value : '';
+            runCode(currentInput);
         });
     }
 
@@ -138,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 📐 টার্মিনাল রিসাইজ (Height Resize) করার হ্যান্ডলার
+    // 📐 টার্মিনাল রিসাইজ করার হ্যান্ডলার
     let isResizing = false;
     let startY = 0;
     let startHeight = 0;

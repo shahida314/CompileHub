@@ -1,17 +1,14 @@
 #include <iostream>
-#include <vector>
-#include <algorithm>
-
 using namespace std;
 
 int main() {
-    vector<int> nums = {5, 2, 8, 1, 3};
-    sort(nums.begin(), nums.end());
+    int n;
+    cin >> n;
 
-    cout << "Sorted Numbers: ";
-    for (int x : nums) {
-        cout << x << " ";
-    }
-    cout << endl;
+    if (n % 2 == 0)
+        cout << "Even";
+    else
+        cout << "Odd";
+
     return 0;
 }
