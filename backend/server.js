@@ -49,13 +49,13 @@ wss.on('connection', (ws) => {
 
             currentChild = runJavaCompilerInteractive(msg.code, {
                 onOutput: (data) => {
-                    ws.send(JSON.stringify({ type: 'output', data }));
+                    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'output', data }));
                 },
                 onError: (data) => {
-                    ws.send(JSON.stringify({ type: 'error', data }));
+                    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'error', data }));
                 },
                 onExit: (code) => {
-                    ws.send(JSON.stringify({ type: 'exit', code }));
+                    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'exit', code }));
                     currentChild = null;
                 }
             });
@@ -63,8 +63,8 @@ wss.on('connection', (ws) => {
 
         // Handle User Input in Terminal
         if (msg.type === 'input') {
-            if (currentChild && currentChild.stdin.writable) {
-                currentChild.stdin.write(msg.data);
+            if (currentChild && currentChild.stdin && currentChild.stdin.writable) {
+                currentChild.stdin.write(msg.data + '\n');
             }
         }
 
@@ -73,7 +73,9 @@ wss.on('connection', (ws) => {
             if (currentChild) {
                 currentChild.kill();
                 currentChild = null;
-                ws.send(JSON.stringify({ type: 'exit', code: null, stopped: true }));
+                if (ws.readyState === ws.OPEN) {
+                    ws.send(JSON.stringify({ type: 'exit', code: null, stopped: true }));
+                }
             }
         }
     });
