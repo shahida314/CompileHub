@@ -1,20 +1,22 @@
 CC = gcc
-LEX = win_flex
-YACC = bison -d
-
+CFLAGS = -Wall -g -Isrc
 SRC_DIR = src
 
-all: cpp_compiler.exe
+PARSER_C = $(SRC_DIR)/parser/parser.tab.c
+PARSER_H = $(SRC_DIR)/parser/parser.tab.h
+LEXER_C  = $(SRC_DIR)/lexer/lex.yy.c
 
-# Ensure parser files (parser.tab.c & parser.tab.h) are generated FIRST
-parser.tab.c parser.tab.h: $(SRC_DIR)/parser/parser.y
-	$(YACC) -o parser.tab.c $(SRC_DIR)/parser/parser.y
+all: cpp_compiler
 
-lex.yy.c: $(SRC_DIR)/lexer/lexer.l parser.tab.h
-	$(LEX) $(SRC_DIR)/lexer/lexer.l
+$(PARSER_C) $(PARSER_H): $(SRC_DIR)/parser/parser.y
+	bison -d -o $(PARSER_C) $<
 
-cpp_compiler.exe: parser.tab.h lex.yy.c parser.tab.c $(SRC_DIR)/ast/ast.c $(SRC_DIR)/symbol_table/symbol_table.c $(SRC_DIR)/semantic/semantic.c $(SRC_DIR)/codegen/codegen.c
-	$(CC) lex.yy.c parser.tab.c $(SRC_DIR)/ast/ast.c $(SRC_DIR)/symbol_table/symbol_table.c $(SRC_DIR)/semantic/semantic.c $(SRC_DIR)/codegen/codegen.c -I. -I$(SRC_DIR) -o cpp_compiler.exe
+$(LEXER_C): $(SRC_DIR)/lexer/lexer.l
+	flex -o $@ $<
+
+cpp_compiler: $(PARSER_C) $(LEXER_C) $(SRC_DIR)/ast/ast.c $(SRC_DIR)/symbol_table/symbol_table.c $(SRC_DIR)/semantic/semantic.c $(SRC_DIR)/codegen/codegen.c
+	$(CC) $(CFLAGS) -o $@ $^
 
 clean:
-	cmd /c del /f /q lex.yy.c parser.tab.c parser.tab.h cpp_compiler.exe
+	rm -f $(PARSER_C) $(PARSER_H) $(LEXER_C)
+	rm -f cpp_compiler cpp_compiler.exe

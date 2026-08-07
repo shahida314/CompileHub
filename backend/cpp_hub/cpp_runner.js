@@ -1,65 +1,47 @@
-const { spawn } = require('child_process');
+const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
 function runCppCode(code, input, callback) {
-  const tempPath = path.join(__dirname, 'temp_cpp_code.txt');
-  
-  
-  fs.writeFileSync(tempPath, code);
-
-  const compilerExe = path.join(__dirname, 'cpp_compiler.exe');
-
-  // Compiler Process Spawn
-  const child = spawn(compilerExe, [tempPath], { cwd: __dirname });
-
-  let output = '';
-  let errorOutput = '';
-  let finished = false;
-
-  function cleanup() {
-    if (fs.existsSync(tempPath)) {
-      try { fs.unlinkSync(tempPath); } catch (e) {}
+    const tempDir = path.join(__dirname, 'temp');
+    if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir);
     }
-  }
 
-  const timer = setTimeout(() => {
-    if (!finished) {
-      finished = true;
-      child.kill();
-      cleanup();
-      callback({ error: 'Execution timed out.' });
-    }
-  }, 5000);
+    const sourcePath = path.join(tempDir, 'temp_code.cpp');
+    const inputPath = path.join(tempDir, 'input.txt');
+    const exePath = path.join(tempDir, 'temp_code.exe');
 
-  child.stdout.on('data', (d) => { output += d.toString(); });
-  child.stderr.on('data', (d) => { errorOutput += d.toString(); });
+    // ইউজার যে ইনপুট দিয়েছে (যদি খালি থাকে তবে ফাঁকা স্ট্রিম)
+    const cleanInput = input ? input.trim() : '';
 
-  if (input && input.trim() !== '') {
-    child.stdin.write(input.endsWith('\n') ? input : input + '\n');
-  }
-  child.stdin.end();
+    fs.writeFileSync(sourcePath, code);
+    fs.writeFileSync(inputPath, cleanInput + '\n');
 
-  child.on('close', (code) => {
-    if (finished) return;
-    finished = true;
-    clearTimeout(timer);
-    cleanup();
+    const compileCmd = `g++ "${sourcePath}" -o "${exePath}"`;
 
-    if (errorOutput) {
-      callback({ error: errorOutput });
-    } else {
-      callback({ output: output || '(No output produced)' });
-    }
-  });
+    exec(compileCmd, (compileErr, stdout, stderr) => {
+        if (compileErr) {
+            callback({ output: stderr || compileErr.message });
+            return;
+        }
 
-  child.on('error', (err) => {
-    if (finished) return;
-    finished = true;
-    clearTimeout(timer);
-    cleanup();
-    callback({ error: 'Failed to run compiler: ' + err.message });
-  });
+        const runCmd = `"${exePath}" < "${inputPath}"`;
+
+        // 3 সেকেন্ড টাইমআউট যেন ইনফিনিট লুপে না পড়ে
+        exec(runCmd, { timeout: 3000 }, (runErr, runStdout, runStderr) => {
+            if (runErr) {
+                if (runErr.killed) {
+                    callback({ output: "⚠️ Timeout: Program waited for input or hit an infinite loop." });
+                } else {
+                    callback({ output: runStderr || runErr.message });
+                }
+                return;
+            }
+            
+            callback({ output: runStdout });
+        });
+    });
 }
 
 module.exports = { runCppCode };

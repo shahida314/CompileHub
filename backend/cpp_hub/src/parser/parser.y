@@ -3,715 +3,195 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../ast/ast.h"
+#include "../symbol_table/symbol_table.h"
+#include "../semantic/semantic.h"
+#include "../codegen/codegen.h"
+
 extern int yylex();
-extern int line_num;
-extern FILE *yyin;
+extern int yylineno_custom;
 void yyerror(const char *s);
 
-extern void init_symbol_table();
-extern void check_declaration(const char *name, const char *type, int scope);
-extern void check_variable_usage(const char *name);
-extern void check_assignment_type(const char *name, const char *expr_type);
-extern void check_operator_types(const char *op_category, const char *left_type, const char *right_type);
-extern int semantic_error_count;
-
-extern void set_variable_value(const char *name, int val);
-extern int get_variable_value(const char *name);
-extern void set_variable_value_float(const char *name, float val);
-extern float get_variable_value_float(const char *name);
-extern void set_variable_value_bool(const char *name, int val);
-extern int get_variable_value_bool(const char *name);
-extern const char *get_variable_type(const char *name);
-
-typedef enum {
-    NODE_STMT_LIST, NODE_DECL, NODE_ASSIGN, NODE_IF, NODE_WHILE, NODE_FOR,
-    NODE_PRINTF, NODE_BINOP, NODE_UNOP, NODE_VAR, NODE_NUM_INT, NODE_NUM_FLOAT,
-    NODE_BOOL, NODE_FUNC_CALL, NODE_RETURN,
-    NODE_STRING, NODE_ENDL, NODE_INPUT
-} NodeType;
-
-typedef struct ASTNode {
-    NodeType type;
-    int int_val;
-    float float_val;
-    int bool_val;
-    char *str_val;
-    int op;
-    struct ASTNode *left;
-    struct ASTNode *right;
-    struct ASTNode *cond;
-    struct ASTNode *then_branch;
-    struct ASTNode *else_branch;
-    struct ASTNode *body;
-    struct ASTNode *init_stmt;
-    struct ASTNode *post_stmt;
-    struct ASTNode *next;
-    struct ASTNode *stream_next;   /* chain for cout << a << b << endl; AND cin >> a >> b; */
-} ASTNode;
-
-extern ASTNode *create_node(NodeType type);
-extern ASTNode *create_binop(int op, ASTNode *left, ASTNode *right);
-extern ASTNode *create_unop(int op, ASTNode *operand);
-extern void print_ast(ASTNode *node, int indent);
-extern void generate_tac(ASTNode *node);
-
-int eval_ast(ASTNode *node);
-const char *eval_type(ASTNode *node);
-void execute_ast(ASTNode *node);
-
-typedef struct Function {
-    char *name;
-    char *param_name;
-    char *param_type;
-    ASTNode *body;
-    struct Function *next;
-} Function;
-
-Function *function_list = NULL;
-
-void define_function(char *name, char *param_name, char *param_type, ASTNode *body) {
-    Function *f = (Function *)malloc(sizeof(Function));
-    f->name = strdup(name);
-    f->param_name = param_name ? strdup(param_name) : NULL;
-    f->param_type = param_type ? strdup(param_type) : NULL;
-    f->body = body;
-    f->next = function_list;
-    function_list = f;
-}
-
-Function *get_function_obj(char *name) {
-    Function *f = function_list;
-    while (f != NULL) {
-        if (strcmp(f->name, name) == 0) return f;
-        f = f->next;
-    }
-    return NULL;
-}
-
-ASTNode *main_body = NULL;
-char *current_decl_type = "int";
+ASTNode *root_node = NULL;
 %}
 
 %union {
-    int int_val;
-    float float_val;
-    char *str_val;
+    int intval;
+    float floatval;
+    char *strval;
     struct ASTNode *node;
 }
 
-%token INCLUDE_STDIO RETURN PRINTF
-%token STD USING NAMESPACE ENDL SCOPE SHL SHR CIN
-%token INT FLOAT BOOL IF ELSE WHILE FOR TRUE FALSE
-%token <str_val> IDENTIFIER STRING_LITERAL
-%token <int_val> INT_LITERAL
-%token <float_val> FLOAT_LITERAL
-%token ASSIGN PLUS MINUS MULT DIV MOD
-%token EQ NEQ LT GT LE GE AND OR NOT
-%token SEMICOLON LBRACE RBRACE LPAREN RPAREN COMMA
+/* Tokens Definition */
+%token INT_TYPE FLOAT_TYPE BOOL_TYPE IF ELSE FOR CIN COUT ENDL
+%token <intval> INT_LITERAL BOOL_LITERAL
+%token <floatval> FLOAT_LITERAL
+%token <strval> IDENTIFIER
+%token AND OR EQ NE LSHIFT RSHIFT
 
-%type <node> statement statement_list declaration_stmt assignment_stmt if_stmt while_stmt for_stmt
-%type <node> printf_stmt input_stmt block_stmt expression expression_list function_def function_call
-%type <node> return_stmt function_list_all program includes identifier_list for_init for_update
-%type <node> stream_list stream_operand stream_in_list
-%type <str_val> type_spec
-
-%nonassoc LOWER_THAN_ELSE
-%nonassoc ELSE
+/* Operator Precedence and Associativity */
+%right '='
 %left OR
 %left AND
-%left EQ NEQ
-%left LT GT LE GE
-%left PLUS MINUS
-%left MULT DIV MOD
-%right NOT UMINUS
+%left EQ NE
+%left '<' '>'
+%left '+' '-'
+%left '*' '/' '%'
+%right '!'
+
+/* Non-Terminals Type Binding */
+%type <node> program stmt_list stmt decl_stmt assign_stmt io_stmt if_stmt for_stmt block_stmt expr
+%type <strval> type_spec
 
 %%
 
-program:
-    includes function_list_all {
-        Function *main_func = get_function_obj("main");
-        if (main_func != NULL && main_func->body != NULL) {
-            main_body = main_func->body;
-        }
-    }
-  | function_list_all {
-        Function *main_func = get_function_obj("main");
-        if (main_func != NULL && main_func->body != NULL) {
-            main_body = main_func->body;
-        }
-    }
-  ;
+program
+    : stmt_list { root_node = $1; }
+    ;
 
-includes:
-    INCLUDE_STDIO { $$ = NULL; }
-  | INCLUDE_STDIO USING NAMESPACE STD SEMICOLON { $$ = NULL; }
-  ;
+stmt_list
+    : stmt { $$ = $1; }
+    | stmt stmt_list { $1->next = $2; $$ = $1; }
+    ;
 
-function_list_all:
-    function_list_all function_def { $$ = NULL; }
-  | function_def { $$ = NULL; }
-  ;
+stmt
+    : decl_stmt { $$ = $1; }
+    | assign_stmt { $$ = $1; }
+    | io_stmt { $$ = $1; }
+    | if_stmt { $$ = $1; }
+    | for_stmt { $$ = $1; }
+    | block_stmt { $$ = $1; }
+    ;
 
-function_def:
-    type_spec IDENTIFIER LPAREN type_spec IDENTIFIER RPAREN LBRACE
-    statement_list return_stmt RBRACE {
-        check_declaration($5, $4, 1);
-        ASTNode *body = $8;
-        ASTNode *ret = $9;
-        if (ret != NULL) {
-            if (body == NULL) body = ret;
-            else {
-                ASTNode *curr = body;
-                while (curr->next != NULL) curr = curr->next;
-                curr->next = ret;
-            }
-        }
-        define_function($2, $5, $4, body);
-        $$ = NULL;
-    }
-  | type_spec IDENTIFIER LPAREN RPAREN LBRACE statement_list return_stmt RBRACE {
-        ASTNode *body = $6;
-        ASTNode *ret = $7;
-        if (ret != NULL) {
-            if (body == NULL) body = ret;
-            else {
-                ASTNode *curr = body;
-                while (curr->next != NULL) curr = curr->next;
-                curr->next = ret;
-            }
-        }
-        define_function($2, NULL, NULL, body);
-        $$ = NULL;
-    }
-  ;
+type_spec
+    : INT_TYPE { $$ = "int"; }
+    | FLOAT_TYPE { $$ = "float"; }
+    | BOOL_TYPE { $$ = "bool"; }
+    ;
 
-return_stmt:
-    RETURN expression SEMICOLON {
-        ASTNode *n = create_node(NODE_RETURN);
-        n->left = $2;
-        $$ = n;
+decl_stmt
+    : type_spec IDENTIFIER ';' {
+        $$ = create_node(NODE_DECL);
+        $$->op_val = $1;
+        $$->left = create_var_node($2, yylineno_custom);
+        $$->line = yylineno_custom;
     }
-  | /* empty */ { $$ = NULL; }
-  ;
+    ;
 
-statement_list:
-    statement_list statement {
-        if ($1 == NULL) { $$ = $2; }
-        else {
-            ASTNode *curr = $1;
-            while (curr->next != NULL) curr = curr->next;
-            curr->next = $2;
-            $$ = $1;
-        }
+assign_stmt
+    : IDENTIFIER '=' expr ';' {
+        $$ = create_node(NODE_ASSIGN);
+        $$->left = create_var_node($1, yylineno_custom);
+        $$->right = $3;
+        $$->line = yylineno_custom;
     }
-  | /* empty */ { $$ = NULL; }
-  ;
+    ;
 
-statement:
-    declaration_stmt
-  | assignment_stmt
-  | if_stmt
-  | while_stmt
-  | for_stmt
-  | printf_stmt
-  | input_stmt
-  | block_stmt
-  | function_call SEMICOLON { $$ = $1; }
-  ;
+io_stmt
+    : CIN RSHIFT IDENTIFIER ';' {
+        $$ = create_node(NODE_READ);
+        $$->left = create_var_node($3, yylineno_custom);
+        $$->line = yylineno_custom;
+    }
+    | COUT LSHIFT expr ';' {
+        $$ = create_node(NODE_PRINT);
+        $$->left = $3;
+        $$->line = yylineno_custom;
+    }
+    | COUT LSHIFT ENDL ';' {
+        $$ = create_node(NODE_PRINT);
+        $$->left = create_int_node(0);
+        $$->line = yylineno_custom;
+    }
+    ;
 
-type_spec:
-    INT   { $$ = "int";   current_decl_type = "int"; }
-  | FLOAT { $$ = "float"; current_decl_type = "float"; }
-  | BOOL  { $$ = "bool";  current_decl_type = "bool"; }
-  ;
+if_stmt
+    : IF '(' expr ')' stmt {
+        $$ = create_node(NODE_IF);
+        $$->left = $3;
+        $$->right = $5;
+        $$->line = yylineno_custom;
+    }
+    | IF '(' expr ')' stmt ELSE stmt {
+        $$ = create_node(NODE_IF);
+        $$->left = $3;
+        $$->right = $5;
+        $$->third = $7;
+        $$->line = yylineno_custom;
+    }
+    ;
 
-declaration_stmt:
-    type_spec identifier_list SEMICOLON { $$ = $2; }
-  ;
+for_stmt
+    : FOR '(' decl_stmt expr ';' assign_stmt ')' stmt {
+        $$ = create_node(NODE_FOR);
+        $$->left = $3;
+        $$->right = $4;
+        $$->third = $6;
+        $$->next = $8;
+        $$->line = yylineno_custom;
+    }
+    | FOR '(' assign_stmt expr ';' assign_stmt ')' stmt {
+        $$ = create_node(NODE_FOR);
+        $$->left = $3;
+        $$->right = $4;
+        $$->third = $6;
+        $$->next = $8;
+        $$->line = yylineno_custom;
+    }
+    ;
 
-identifier_list:
-    IDENTIFIER {
-        check_declaration($1, current_decl_type, 0);
-        ASTNode *n = create_node(NODE_DECL);
-        n->str_val = $1;
-        $$ = n;
+block_stmt
+    : '{' stmt_list '}' {
+        $$ = create_node(NODE_BLOCK);
+        $$->left = $2;
+        $$->line = yylineno_custom;
     }
-  | IDENTIFIER ASSIGN expression {
-        check_declaration($1, current_decl_type, 0);
-        check_assignment_type($1, eval_type($3));
-        ASTNode *n = create_node(NODE_ASSIGN);
-        n->str_val = $1;
-        n->left = $3;
-        $$ = n;
-    }
-  | identifier_list COMMA IDENTIFIER {
-        check_declaration($3, current_decl_type, 0);
-        ASTNode *n = create_node(NODE_DECL);
-        n->str_val = $3;
-        ASTNode *curr = $1;
-        while (curr->next != NULL) curr = curr->next;
-        curr->next = n;
-        $$ = $1;
-    }
-  | identifier_list COMMA IDENTIFIER ASSIGN expression {
-        check_declaration($3, current_decl_type, 0);
-        check_assignment_type($3, eval_type($5));
-        ASTNode *n = create_node(NODE_ASSIGN);
-        n->str_val = $3;
-        n->left = $5;
-        ASTNode *curr = $1;
-        while (curr->next != NULL) curr = curr->next;
-        curr->next = n;
-        $$ = $1;
-    }
-  ;
+    ;
 
-assignment_stmt:
-    IDENTIFIER ASSIGN expression SEMICOLON {
-        check_variable_usage($1);
-        check_assignment_type($1, eval_type($3));
-        ASTNode *n = create_node(NODE_ASSIGN);
-        n->str_val = $1;
-        n->left = $3;
-        $$ = n;
+expr
+    : expr '+' expr { $$ = create_op_node("+", $1, $3); }
+    | expr '-' expr { $$ = create_op_node("-", $1, $3); }
+    | expr '*' expr { $$ = create_op_node("*", $1, $3); }
+    | expr '/' expr { $$ = create_op_node("/", $1, $3); }
+    | expr '%' expr { $$ = create_op_node("%", $1, $3); }
+    | expr '<' expr { $$ = create_op_node("<", $1, $3); }
+    | expr '>' expr { $$ = create_op_node(">", $1, $3); }
+    | expr EQ expr  { $$ = create_op_node("==", $1, $3); }
+    | expr NE expr  { $$ = create_op_node("!=", $1, $3); }
+    | expr AND expr { $$ = create_op_node("&&", $1, $3); }
+    | expr OR expr  { $$ = create_op_node("||", $1, $3); }
+    | '!' expr      { 
+        $$ = create_node(NODE_UNARY_OP); 
+        $$->op_val = "!"; 
+        $$->left = $2; 
     }
-  ;
-
-if_stmt:
-    IF LPAREN expression RPAREN statement ELSE statement {
-        ASTNode *n = create_node(NODE_IF);
-        n->cond = $3;
-        n->then_branch = $5;
-        n->else_branch = $7;
-        $$ = n;
-    }
-  | IF LPAREN expression RPAREN statement %prec LOWER_THAN_ELSE {
-        ASTNode *n = create_node(NODE_IF);
-        n->cond = $3;
-        n->then_branch = $5;
-        n->else_branch = NULL;
-        $$ = n;
-    }
-  ;
-
-while_stmt:
-    WHILE LPAREN expression RPAREN statement {
-        ASTNode *n = create_node(NODE_WHILE);
-        n->cond = $3;
-        n->body = $5;
-        $$ = n;
-    }
-  ;
-
-for_init:
-    type_spec IDENTIFIER ASSIGN expression {
-        check_declaration($2, $1, 0);
-        check_assignment_type($2, eval_type($4));
-        ASTNode *n = create_node(NODE_ASSIGN);
-        n->str_val = $2;
-        n->left = $4;
-        $$ = n;
-    }
-  | IDENTIFIER ASSIGN expression {
-        check_variable_usage($1);
-        check_assignment_type($1, eval_type($3));
-        ASTNode *n = create_node(NODE_ASSIGN);
-        n->str_val = $1;
-        n->left = $3;
-        $$ = n;
-    }
-  ;
-
-for_update:
-    IDENTIFIER ASSIGN expression {
-        check_variable_usage($1);
-        check_assignment_type($1, eval_type($3));
-        ASTNode *n = create_node(NODE_ASSIGN);
-        n->str_val = $1;
-        n->left = $3;
-        $$ = n;
-    }
-  ;
-
-for_stmt:
-    FOR LPAREN for_init SEMICOLON expression SEMICOLON for_update RPAREN statement {
-        ASTNode *n = create_node(NODE_FOR);
-        n->init_stmt = $3;
-        n->cond = $5;
-        n->post_stmt = $7;
-        n->body = $9;
-        $$ = n;
-    }
-  ;
-
-/* cout / std::cout prefix */
-cout_prefix:
-    PRINTF          { }
-  | STD SCOPE PRINTF { }
-  ;
-
-stream_operand:
-    expression      { $$ = $1; }
-  | ENDL            { $$ = create_node(NODE_ENDL); }
-  | STD SCOPE ENDL  { $$ = create_node(NODE_ENDL); }
-  ;
-
-stream_list:
-    SHL stream_operand {
-        $$ = $2;
-    }
-  | stream_list SHL stream_operand {
-        ASTNode *curr = $1;
-        while (curr->stream_next != NULL) curr = curr->stream_next;
-        curr->stream_next = $3;
-        $$ = $1;
-    }
-  ;
-
-printf_stmt:
-    cout_prefix stream_list SEMICOLON {
-        ASTNode *n = create_node(NODE_PRINTF);
-        n->str_val = NULL;
-        n->left = $2;
-        $$ = n;
-    }
-  | PRINTF LPAREN STRING_LITERAL RPAREN SEMICOLON {
-        ASTNode *n = create_node(NODE_PRINTF);
-        n->str_val = $3;
-        n->left = NULL;
-        $$ = n;
-    }
-  | PRINTF LPAREN STRING_LITERAL COMMA expression_list RPAREN SEMICOLON {
-        ASTNode *n = create_node(NODE_PRINTF);
-        n->str_val = $3;
-        n->left = $5;
-        $$ = n;
-    }
-  | PRINTF LPAREN expression RPAREN SEMICOLON {
-        ASTNode *n = create_node(NODE_PRINTF);
-        n->str_val = NULL;
-        n->left = $3;
-        $$ = n;
-    }
-  ;
-
-/* cin / std::cin prefix — NEW */
-cin_prefix:
-    CIN            { }
-  | STD SCOPE CIN  { }
-  ;
-
-stream_in_list:
-    SHR IDENTIFIER {
-        check_variable_usage($2);
-        ASTNode *n = create_node(NODE_INPUT);
-        n->str_val = $2;
-        $$ = n;
-    }
-  | stream_in_list SHR IDENTIFIER {
-        check_variable_usage($3);
-        ASTNode *n = create_node(NODE_INPUT);
-        n->str_val = $3;
-        ASTNode *curr = $1;
-        while (curr->stream_next != NULL) curr = curr->stream_next;
-        curr->stream_next = n;
-        $$ = $1;
-    }
-  ;
-
-input_stmt:
-    cin_prefix stream_in_list SEMICOLON {
-        $$ = $2;
-    }
-  ;
-
-function_call:
-    IDENTIFIER LPAREN expression RPAREN {
-        ASTNode *n = create_node(NODE_FUNC_CALL);
-        n->str_val = $1;
-        n->left = $3;
-        $$ = n;
-    }
-  | IDENTIFIER LPAREN RPAREN {
-        ASTNode *n = create_node(NODE_FUNC_CALL);
-        n->str_val = $1;
-        n->left = NULL;
-        $$ = n;
-    }
-  ;
-
-expression_list:
-    expression { $$ = $1; }
-  ;
-
-block_stmt:
-    LBRACE statement_list RBRACE { $$ = $2; }
-  ;
-
-expression:
-    expression PLUS expression  { $$ = create_binop(PLUS, $1, $3);  check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
-  | expression MINUS expression { $$ = create_binop(MINUS, $1, $3); check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
-  | expression MULT expression  { $$ = create_binop(MULT, $1, $3);  check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
-  | expression DIV expression   { $$ = create_binop(DIV, $1, $3);   check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
-  | expression MOD expression   { $$ = create_binop(MOD, $1, $3);   check_operator_types("arithmetic", eval_type($1), eval_type($3)); }
-  | expression EQ expression    { $$ = create_binop(EQ, $1, $3); }
-  | expression NEQ expression   { $$ = create_binop(NEQ, $1, $3); }
-  | expression GT expression    { $$ = create_binop(GT, $1, $3);    check_operator_types("relational", eval_type($1), eval_type($3)); }
-  | expression LT expression    { $$ = create_binop(LT, $1, $3);    check_operator_types("relational", eval_type($1), eval_type($3)); }
-  | expression GE expression    { $$ = create_binop(GE, $1, $3);    check_operator_types("relational", eval_type($1), eval_type($3)); }
-  | expression LE expression    { $$ = create_binop(LE, $1, $3);    check_operator_types("relational", eval_type($1), eval_type($3)); }
-  | expression AND expression   { $$ = create_binop(AND, $1, $3);   check_operator_types("logical", eval_type($1), eval_type($3)); }
-  | expression OR expression    { $$ = create_binop(OR, $1, $3);    check_operator_types("logical", eval_type($1), eval_type($3)); }
-  | NOT expression               { $$ = create_unop(NOT, $2); }
-  | MINUS expression %prec UMINUS { $$ = create_unop(MINUS, $2); }
-  | LPAREN expression RPAREN     { $$ = $2; }
-  | function_call                { $$ = $1; }
-  | STRING_LITERAL {
-        ASTNode *n = create_node(NODE_STRING);
-        n->str_val = $1;
-        $$ = n;
-    }
-  | IDENTIFIER {
-        check_variable_usage($1);
-        ASTNode *n = create_node(NODE_VAR);
-        n->str_val = $1;
-        $$ = n;
-    }
-  | INT_LITERAL {
-        ASTNode *n = create_node(NODE_NUM_INT);
-        n->int_val = $1;
-        $$ = n;
-    }
-  | FLOAT_LITERAL {
-        ASTNode *n = create_node(NODE_NUM_FLOAT);
-        n->float_val = $1;
-        $$ = n;
-    }
-  | TRUE {
-        ASTNode *n = create_node(NODE_BOOL);
-        n->bool_val = 1;
-        $$ = n;
-    }
-  | FALSE {
-        ASTNode *n = create_node(NODE_BOOL);
-        n->bool_val = 0;
-        $$ = n;
-    }
-  ;
+    | '(' expr ')'  { $$ = $2; }
+    | IDENTIFIER    { $$ = create_var_node($1, yylineno_custom); }
+    | INT_LITERAL   { $$ = create_int_node($1); }
+    | FLOAT_LITERAL { $$ = create_float_node($1); }
+    | BOOL_LITERAL  { $$ = create_bool_node($1); }
+    ;
 
 %%
-
-/* Infers the semantic "type name" of an expression, for type-checking */
-const char *eval_type(ASTNode *node) {
-    if (!node) return "unknown";
-    switch (node->type) {
-        case NODE_NUM_INT: return "int";
-        case NODE_NUM_FLOAT: return "float";
-        case NODE_BOOL: return "bool";
-        case NODE_STRING: return "string";
-        case NODE_VAR: {
-            return get_variable_type(node->str_val);
-        }
-        case NODE_UNOP:
-            return node->op == NOT ? "bool" : eval_type(node->left);
-        case NODE_BINOP: {
-            if (node->op == AND || node->op == OR) return "bool";
-            if (node->op == LT || node->op == GT || node->op == LE ||
-                node->op == GE || node->op == EQ || node->op == NEQ) return "bool";
-            const char *lt = eval_type(node->left);
-            const char *rt = eval_type(node->right);
-            if (strcmp(lt, "float") == 0 || strcmp(rt, "float") == 0) return "float";
-            return "int";
-        }
-        default: return "int";
-    }
-}
-
-int eval_ast(ASTNode *node) {
-    if (!node) return 0;
-    switch (node->type) {
-        case NODE_NUM_INT: return node->int_val;
-        case NODE_NUM_FLOAT: return (int)node->float_val;
-        case NODE_BOOL: return node->bool_val;
-        case NODE_VAR: return get_variable_value(node->str_val);
-        case NODE_FUNC_CALL: {
-            Function *f = get_function_obj(node->str_val);
-            if (f) {
-                if (f->param_name && node->left) {
-                    int arg_val = eval_ast(node->left);
-                    set_variable_value(f->param_name, arg_val);
-                }
-                if (f->body) execute_ast(f->body);
-            }
-            return 0;
-        }
-        case NODE_UNOP: {
-            int v = eval_ast(node->left);
-            if (node->op == NOT) return !v;
-            if (node->op == MINUS) return -v;
-            return v;
-        }
-        case NODE_BINOP: {
-            int l = eval_ast(node->left);
-            int r = eval_ast(node->right);
-            switch (node->op) {
-                case PLUS: return l + r;
-                case MINUS: return l - r;
-                case MULT: return l * r;
-                case DIV: return r != 0 ? l / r : 0;
-                case MOD: return r != 0 ? l % r : 0;
-                case EQ: return l == r;
-                case NEQ: return l != r;
-                case GT: return l > r;
-                case LT: return l < r;
-                case GE: return l >= r;
-                case LE: return l <= r;
-                case AND: return l && r;
-                case OR: return l || r;
-            }
-        }
-        default: return 0;
-    }
-    return 0;
-}
-
-void execute_ast(ASTNode *node) {
-    ASTNode *curr = node;
-    while (curr != NULL) {
-        switch (curr->type) {
-            case NODE_DECL:
-                set_variable_value(curr->str_val, curr->left ? eval_ast(curr->left) : 0);
-                break;
-            case NODE_ASSIGN:
-                set_variable_value(curr->str_val, eval_ast(curr->left));
-                break;
-            case NODE_INPUT: {
-                /* cin >> a >> b >> c; — read each variable according to its declared type */
-                ASTNode *op = curr;
-                while (op) {
-                    const char *t = get_variable_type(op->str_val);
-                    if (strcmp(t, "float") == 0) {
-                        float fv = 0.0f;
-                        if (scanf("%f", &fv) != 1) { fv = 0.0f; }
-                        set_variable_value_float(op->str_val, fv);
-                        set_variable_value(op->str_val, (int)fv);
-                    } else {
-                        int iv = 0;
-                        if (scanf("%d", &iv) != 1) { iv = 0; }
-                        set_variable_value(op->str_val, iv);
-                        if (strcmp(t, "bool") == 0) set_variable_value_bool(op->str_val, iv != 0);
-                    }
-                    op = op->stream_next;
-                }
-                /* NODE_INPUT chain is consumed as a whole statement; skip the rest of the chain
-                   in the outer while() so it isn't treated as separate top-level statements. */
-                curr = curr->next;
-                continue;
-            }
-            case NODE_PRINTF: {
-                if (curr->str_val == NULL && curr->left != NULL) {
-                    ASTNode *op = curr->left;
-                    if (op->stream_next == NULL && op->type != NODE_STRING && op->type != NODE_ENDL) {
-                        printf("%d\n", eval_ast(op));
-                    } else {
-                        while (op) {
-                            if (op->type == NODE_ENDL) {
-                                printf("\n");
-                            } else if (op->type == NODE_STRING) {
-                                char *s = op->str_val;
-                                int len = strlen(s);
-                                for (int i = 1; i < len - 1; i++) putchar(s[i]);
-                            } else {
-                                const char *t = eval_type(op);
-                                if (strcmp(t, "bool") == 0)
-                                    printf("%s", eval_ast(op) ? "true" : "false");
-                                else
-                                    printf("%d", eval_ast(op));
-                            }
-                            op = op->stream_next;
-                        }
-                    }
-                } else if (curr->str_val != NULL) {
-                    char *fmt = curr->str_val;
-                    int len = strlen(fmt);
-                    char temp[256];
-                    int j = 0;
-                    for (int i = 0; i < len; i++) {
-                        if (fmt[i] != '"') temp[j++] = fmt[i];
-                    }
-                    temp[j] = '\0';
-                    if (curr->left) {
-                        int val = eval_ast(curr->left);
-                        char buffer[256];
-                        snprintf(buffer, sizeof(buffer), temp, val);
-                        printf("%s\n", buffer);
-                    } else {
-                        printf("%s\n", temp);
-                    }
-                }
-                break;
-            }
-            case NODE_IF:
-                if (eval_ast(curr->cond)) {
-                    if (curr->then_branch) execute_ast(curr->then_branch);
-                } else {
-                    if (curr->else_branch) execute_ast(curr->else_branch);
-                }
-                break;
-            case NODE_WHILE:
-                while (eval_ast(curr->cond)) execute_ast(curr->body);
-                break;
-            case NODE_FOR:
-                execute_ast(curr->init_stmt);
-                while (eval_ast(curr->cond)) {
-                    execute_ast(curr->body);
-                    execute_ast(curr->post_stmt);
-                }
-                break;
-            case NODE_FUNC_CALL: {
-                Function *f = get_function_obj(curr->str_val);
-                if (f) {
-                    if (f->param_name && curr->left) {
-                        int arg_val = eval_ast(curr->left);
-                        set_variable_value(f->param_name, arg_val);
-                    }
-                    if (f->body) execute_ast(f->body);
-                }
-                break;
-            }
-            case NODE_RETURN:
-                if (curr->left) eval_ast(curr->left);
-                return;
-            default:
-                break;
-        }
-        curr = curr->next;
-    }
-}
 
 void yyerror(const char *s) {
-    fprintf(stderr, "Syntax Error at line %d: %s\n", line_num, s);
+    fprintf(stderr, "Syntax Error (Line %d): %s\n", yylineno_custom, s);
+    exit(1);
 }
 
-int main(int argc, char **argv) {
+int main() {
     init_symbol_table();
-    if (argc > 1) {
-        FILE *f = fopen(argv[1], "r");
-        if (!f) { perror("File opening failed"); return 1; }
-        yyin = f;
+    
+    // Step 1: Lexical and Syntax Analysis (AST Construction)
+    if (yyparse() == 0 && root_node) {
+        
+        // Step 2: Semantic Analysis Phase (Type Checking & Scope Validation)
+        analyze_semantics(root_node);
+        
+        // Step 3: Intermediate Code Generation Phase (TAC Output Generation)
+        printf("--- TAC Generated Code ---\n");
+        generate_tac(root_node);
+        printf("--- Execution Completed Successfully ---\n");
     }
-    int parse_result = yyparse();
-    if (parse_result == 0 && semantic_error_count == 0 && main_body != NULL) {
-        printf("\n=== ABSTRACT SYNTAX TREE ===\n");
-        print_ast(main_body, 0);
-        printf("\n=== THREE ADDRESS CODE (TAC) ===\n");
-        generate_tac(main_body);
-        printf("\n=== PROGRAM OUTPUT ===\n");
-        execute_ast(main_body);
-    } else if (semantic_error_count > 0) {
-        fprintf(stderr, "\nCompilation failed with %d semantic error(s). TAC not generated.\n",
-                semantic_error_count);
-        return 1;
-    }
-    return parse_result;
+    return 0;
 }

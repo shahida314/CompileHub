@@ -1,9 +1,18 @@
-#include <iostream>
+int a;
+bool flag;
 
-int main() {
-    int x;
-    x = 5;
-    bool b = 5 + 3.2;
-    cout(z);
-    return 0;
+a = 10;
+flag = true;
+
+// Error 1: Undeclared variable 'b'
+b = 20; 
+
+// Error 2: Type mismatch (bool variable এ int assign করা)
+flag = 100; 
+
+// Error 3: Redeclaration of variable 'a' in same scope
+int a; 
+
+if (a > 50 { // Error 4: Syntax error (missing parenthesis)
+    cout << a;
 }

@@ -1,121 +1,76 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "symbol_table.h"
 
-#define TABLE_SIZE 100
-
-typedef struct Symbol {
-    char *name;
-    char *type; // "int" | "float" | "bool"
-    int scope;
-    int int_val;
-    float float_val;
-    int bool_val;
-    struct Symbol *next;
-} Symbol;
-
-Symbol *symbolTable[TABLE_SIZE];
-
-unsigned int hash(const char *name) {
-    unsigned int h = 0;
-    while (*name) {
-        h = (h << 5) + *name++;
-    }
-    return h % TABLE_SIZE;
-}
+static Scope *current_scope = NULL;
+static int current_level = 0;
 
 void init_symbol_table() {
-    for (int i = 0; i < TABLE_SIZE; i++) {
-        symbolTable[i] = NULL;
+    current_scope = (Scope*)malloc(sizeof(Scope));
+    current_scope->level = 0;
+    current_scope->symbols = NULL;
+    current_scope->parent = NULL;
+    current_level = 0;
+}
+
+void enter_scope() {
+    Scope *new_scope = (Scope*)malloc(sizeof(Scope));
+    new_scope->level = ++current_level;
+    new_scope->symbols = NULL;
+    new_scope->parent = current_scope;
+    current_scope = new_scope;
+}
+
+void exit_scope() {
+    if (current_scope->parent) {
+        Scope *temp = current_scope;
+        current_scope = current_scope->parent;
+        free(temp);
     }
 }
 
-// Variable Declaration
-int insert_symbol(const char *name, const char *type, int scope) {
-    unsigned int index = hash(name);
-    Symbol *current = symbolTable[index];
-    while (current != NULL) {
-        if (strcmp(current->name, name) == 0 && current->scope == scope) {
-            return 0; // redeclaration in same scope
+int insert_symbol(const char *name, DataType type, int line) {
+    Symbol *curr = current_scope->symbols;
+    while (curr) {
+        if (strcmp(curr->name, name) == 0) {
+            return 0; // Already declared in this scope
         }
-        current = current->next;
+        curr = curr->next;
     }
-    Symbol *new_symbol = (Symbol *)malloc(sizeof(Symbol));
-    new_symbol->name = strdup(name);
-    new_symbol->type = strdup(type);
-    new_symbol->scope = scope;
-    new_symbol->int_val = 0;
-    new_symbol->float_val = 0.0f;
-    new_symbol->bool_val = 0;
-    new_symbol->next = symbolTable[index];
-    symbolTable[index] = new_symbol;
+
+    Symbol *sym = (Symbol*)malloc(sizeof(Symbol));
+    sym->name = strdup(name);
+    sym->type = type;
+    sym->line_declared = line;
+    sym->scope_level = current_scope->level;
+    sym->next = current_scope->symbols;
+    current_scope->symbols = sym;
     return 1;
 }
 
-Symbol *lookup_symbol(const char *name) {
-    unsigned int index = hash(name);
-    Symbol *current = symbolTable[index];
-    while (current != NULL) {
-        if (strcmp(current->name, name) == 0) {
-            return current;
+Symbol* lookup_symbol(const char *name) {
+    Scope *sc = current_scope;
+    while (sc) {
+        Symbol *sym = sc->symbols;
+        while (sym) {
+            if (strcmp(sym->name, name) == 0) return sym;
+            sym = sym->next;
         }
-        current = current->next;
+        sc = sc->parent;
     }
     return NULL;
 }
 
-// NEW: returns the declared type of a variable, used for input (cin) and eval_type
-const char *get_variable_type(const char *name) {
-    Symbol *s = lookup_symbol(name);
-    return s ? s->type : "int";
+DataType get_type_from_string(const char *type_str) {
+    if (strcmp(type_str, "int") == 0) return TYPE_INT;
+    if (strcmp(type_str, "float") == 0) return TYPE_FLOAT;
+    if (strcmp(type_str, "bool") == 0) return TYPE_BOOL;
+    return TYPE_UNKNOWN;
 }
 
-// ---- int ----
-void set_variable_value(const char *name, int val) {
-    Symbol *s = lookup_symbol(name);
-    if (!s) { insert_symbol(name, "int", 0); s = lookup_symbol(name); }
-    if (s) s->int_val = val;
-}
-
-int get_variable_value(const char *name) {
-    Symbol *s = lookup_symbol(name);
-    return s ? s->int_val : 0;
-}
-
-// ---- float ----
-void set_variable_value_float(const char *name, float val) {
-    Symbol *s = lookup_symbol(name);
-    if (!s) { insert_symbol(name, "float", 0); s = lookup_symbol(name); }
-    if (s) s->float_val = val;
-}
-
-float get_variable_value_float(const char *name) {
-    Symbol *s = lookup_symbol(name);
-    return s ? s->float_val : 0.0f;
-}
-
-// ---- bool ----
-void set_variable_value_bool(const char *name, int val) {
-    Symbol *s = lookup_symbol(name);
-    if (!s) { insert_symbol(name, "bool", 0); s = lookup_symbol(name); }
-    if (s) s->bool_val = val;
-}
-
-int get_variable_value_bool(const char *name) {
-    Symbol *s = lookup_symbol(name);
-    return s ? s->bool_val : 0;
-}
-
-void print_symbol_table() {
-    printf("\n=== SYMBOL TABLE ===\n");
-    printf("%-15s %-10s %-10s\n", "Name", "Type", "Scope");
-    printf("-----------------------------------------\n");
-    for (int i = 0; i < TABLE_SIZE; i++) {
-        Symbol *current = symbolTable[i];
-        while (current != NULL) {
-            printf("%-15s %-10s %-10d\n", current->name, current->type, current->scope);
-            current = current->next;
-        }
+const char* type_to_string(DataType type) {
+    switch(type) {
+        case TYPE_INT: return "int";
+        case TYPE_FLOAT: return "float";
+        case TYPE_BOOL: return "bool";
+        default: return "unknown";
     }
-    printf("===========================================\n\n");
 }

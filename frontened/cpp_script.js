@@ -16,11 +16,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
     const resizeHandle = document.getElementById('consoleResizeHandle');
 
-    const BACKEND_URL = 'http://localhost:5000/api/compile/cpp';
+    // ব্যাকএন্ডের সঠিক API URL
+    const BACKEND_URL = 'http://localhost:5000/run';
 
-    codeArea.value = defaultCppCode;
+    if (codeArea) {
+        codeArea.value = defaultCppCode;
+    }
 
+    // ১. লাইন নম্বর আপডেট করার ফাংশন
     function updateLineNumbers() {
+        if (!codeArea || !lineNumbers) return;
         const lines = codeArea.value.split('\n').length;
         let lineHTML = '';
         for (let i = 1; i <= Math.max(lines, 8); i++) {
@@ -29,27 +34,30 @@ document.addEventListener('DOMContentLoaded', () => {
         lineNumbers.innerHTML = lineHTML;
     }
 
-    codeArea.addEventListener('scroll', () => {
-        lineNumbers.scrollTop = codeArea.scrollTop;
-    });
+    if (codeArea) {
+        codeArea.addEventListener('input', updateLineNumbers);
+        codeArea.addEventListener('scroll', () => {
+            lineNumbers.scrollTop = codeArea.scrollTop;
+        });
+        updateLineNumbers();
+    }
 
-    languageSelect.addEventListener('change', () => {
-        const selectedLang = languageSelect.value;
-        if (selectedLang === 'c') window.location.href = 'c_ui.html';
-        else if (selectedLang === 'cpp') window.location.href = 'cpp_ui.html';
-        else if (selectedLang === 'python') window.location.href = 'python_ui.html';
-        else if (selectedLang === 'java') window.location.href = 'java_ui.html';
-    });
+    // ২. ল্যাঙ্গুয়েজ চেঞ্জ করলে নেভিগেশন
+    if (languageSelect) {
+        languageSelect.addEventListener('change', () => {
+            const selectedLang = languageSelect.value;
+            if (selectedLang === 'c') window.location.href = 'c_ui.html';
+            else if (selectedLang === 'cpp') window.location.href = 'cpp_ui.html';
+            else if (selectedLang === 'python') window.location.href = 'python_ui.html';
+            else if (selectedLang === 'java') window.location.href = 'java_ui.html';
+        });
+    }
 
-    // ব্যাকএন্ডে কোড পাঠানোর মেইন ফাংশন
+    // ৩. ব্যাকএন্ডে কোড এবং ইনপুট পাঠানোর মূল ফাংশন
     async function runCode(inputData = '') {
         consoleWrapper.classList.remove('hidden', 'collapsed');
         consoleOutput.style.color = '#ffffff';
-        
-        // রান করার সময় লোডিং মেসেজ
-        if (!inputData) {
-            consoleOutput.innerHTML = `&gt; Compiling and executing C++ code...<br>`;
-        }
+        consoleOutput.innerHTML = `&gt; Compiling and executing C++ code...<br>`;
 
         const code = codeArea.value;
 
@@ -57,10 +65,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch(BACKEND_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code, input: inputData })
+                body: JSON.stringify({ code: code, input: inputData })
             });
+
             const result = await response.json();
-            
             let outputHTML = '';
 
             if (result.output) {
@@ -74,12 +82,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 outputHTML = `&gt; Program finished with no output.`;
             }
 
-            // আউটপুটের নিচে সাথে সাথে একটি কাস্টম ইনপুট লাইন যোগ করে দেওয়া (যাতে ইনপুট দেওয়া সম্ভব হয়)
-            outputHTML += `<br><br>&gt; <input type="text" id="terminalPrompt" placeholder="Type input here and press Enter (if needed)..." autofocus />`;
+            // টার্মিনালের নিচে ইনপুট দেওয়ার টেক্সট বক্স বক্স যোগ করা
+            outputHTML += `<br><br>&gt; <input type="text" id="terminalPrompt" placeholder="Type input here and press Enter (if needed)..." style="background:transparent; border:none; color:#00ff00; outline:none; width:80%; font-family:monospace;" autofocus />`;
             
             consoleOutput.innerHTML = outputHTML;
 
-            // ইনপুট ফিল্ড এক্টিভ করা
+            // ইনপুট বক্স একটিভ করা
             attachPromptListener();
 
         } catch (error) {
@@ -88,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // টার্মিনালে ইনপুট দিয়ে Enter চাপলে পুনরায় এক্সিকিউট হওয়া
+    // ৪. টার্মিনালে ইনপুট দিয়ে Enter চাপলে পুনরায় এক্সিকিউট হওয়া
     function attachPromptListener() {
         const terminalPrompt = document.getElementById('terminalPrompt');
         if (terminalPrompt) {
@@ -102,11 +110,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Run বাটনে ক্লিক করলেই সরাসরি রান হবে (ইনপুট থাকুক বা না থাকুক)
-    runBtn.addEventListener('click', () => {
-        runCode('');
-    });
+    // 🖐️ ► Run বাটনে ক্লিক করলে প্রথমবারের জন্য রান হওয়া
+    if (runBtn) {
+        runBtn.addEventListener('click', () => {
+            runCode('');
+        });
+    }
 
+    // ⌨️ শর্টকাট কি এবং টার্মিনাল কন্ট্রোল
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === '`') {
             e.preventDefault();
@@ -115,47 +126,50 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    toggleTerminalBtn.addEventListener('click', () => {
-        consoleWrapper.classList.toggle('collapsed');
-    });
+    if (toggleTerminalBtn) {
+        toggleTerminalBtn.addEventListener('click', () => {
+            consoleWrapper.classList.toggle('collapsed');
+        });
+    }
 
-    closeTerminalBtn.addEventListener('click', () => {
-        consoleWrapper.classList.add('hidden');
-    });
+    if (closeTerminalBtn) {
+        closeTerminalBtn.addEventListener('click', () => {
+            consoleWrapper.classList.add('hidden');
+        });
+    }
 
+    // 📐 টার্মিনাল রিসাইজ (Height Resize) করার হ্যান্ডলার
     let isResizing = false;
     let startY = 0;
     let startHeight = 0;
 
-    resizeHandle.addEventListener('mousedown', (e) => {
-        if (consoleWrapper.classList.contains('collapsed') ||
-            consoleWrapper.classList.contains('hidden')) return;
-        isResizing = true;
-        startY = e.clientY;
-        startHeight = consoleWrapper.offsetHeight;
-        consoleWrapper.classList.add('resizing');
-        document.body.style.cursor = 'ns-resize';
-        e.preventDefault();
-    });
+    if (resizeHandle) {
+        resizeHandle.addEventListener('mousedown', (e) => {
+            if (consoleWrapper.classList.contains('collapsed') || consoleWrapper.classList.contains('hidden')) return;
+            isResizing = true;
+            startY = e.clientY;
+            startHeight = consoleWrapper.offsetHeight;
+            consoleWrapper.classList.add('resizing');
+            document.body.style.cursor = 'ns-resize';
+            e.preventDefault();
+        });
 
-    document.addEventListener('mousemove', (e) => {
-        if (!isResizing) return;
-        const delta = startY - e.clientY;
-        let newHeight = startHeight + delta;
-        const minHeight = 80;
-        const maxHeight = window.innerHeight * 0.7;
-        newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
-        consoleWrapper.style.height = `${newHeight}px`;
-    });
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const delta = startY - e.clientY;
+            let newHeight = startHeight + delta;
+            const minHeight = 80;
+            const maxHeight = window.innerHeight * 0.7;
+            newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
+            consoleWrapper.style.height = `${newHeight}px`;
+        });
 
-    document.addEventListener('mouseup', () => {
-        if (isResizing) {
-            isResizing = false;
-            consoleWrapper.classList.remove('resizing');
-            document.body.style.cursor = '';
-        }
-    });
-
-    codeArea.addEventListener('input', updateLineNumbers);
-    updateLineNumbers();
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                consoleWrapper.classList.remove('resizing');
+                document.body.style.cursor = 'default';
+            }
+        });
+    }
 });
