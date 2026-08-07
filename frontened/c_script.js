@@ -16,12 +16,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
     const resizeHandle = document.getElementById('consoleResizeHandle');
 
-    const C_BACKEND_URL = 'http://localhost:5000/api/compile/c';
-    let currentAbortController = null;
+    let currentWebSocket = null;
+    let inputStartPos = 0;
 
+    // Load default C template and set line numbers
     codeArea.value = defaultCCode;
     updateLineNumbers();
 
+    consoleOutput.style.color = '#27ae60';
+    consoleOutput.innerText = `> Ready to compile and run C code...`;
+
+    // Update editor line numbers
     function updateLineNumbers() {
         const lines = codeArea.value.split('\n').length;
         let lineHTML = '';
@@ -35,77 +40,116 @@ document.addEventListener('DOMContentLoaded', () => {
         lineNumbers.scrollTop = codeArea.scrollTop;
     });
 
-    languageSelect.addEventListener('change', () => {
-        const selected = languageSelect.value;
-        if (selected === 'cpp') window.location.href = 'cpp_ui.html';
-        else if (selected === 'java') window.location.href = 'java_ui.html';
-        else if (selected === 'python') window.location.href = 'python_ui.html';
-    });
+    // Language dropdown navigation
+    if (languageSelect) {
+        languageSelect.addEventListener('change', () => {
+            const selected = languageSelect.value;
+            if (selected === 'cpp') window.location.href = 'cpp_ui.html';
+            else if (selected === 'java') window.location.href = 'java_ui.html';
+            else if (selected === 'python') window.location.href = 'python_ui.html';
+            else if (selected === 'c') window.location.href = 'c_ui.html';
+        });
+    }
 
-    runBtn.addEventListener('click', async (e) => {
+    // Run C code via WebSocket (Clean output like Python)
+    runBtn.addEventListener('click', (e) => {
         e.preventDefault();
 
         consoleWrapper.classList.remove('hidden', 'collapsed');
         consoleOutput.style.color = '#ffffff';
-        consoleOutput.innerHTML = `&gt; Compiling and executing C code...<br>&gt; `;
+        consoleOutput.innerText = ``; // অতিরিক্ত লেখা মুছে ফেলা হয়েছে
+        inputStartPos = consoleOutput.innerText.length;
 
-        currentAbortController = new AbortController();
+        if (currentWebSocket) {
+            currentWebSocket.close();
+        }
 
-        try {
-            const response = await fetch(C_BACKEND_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: codeArea.value }),
-                signal: currentAbortController.signal
-            });
+        // Connect to WebSocket server
+        currentWebSocket = new WebSocket('ws://localhost:5000');
 
-            const result = await response.json();
+        currentWebSocket.onopen = () => {
+            currentWebSocket.send(JSON.stringify({
+                type: 'start_c',
+                code: codeArea.value
+            }));
+        };
 
-            if (result.output) {
-                consoleOutput.style.color = '#ffffff';
-                consoleOutput.innerHTML = `&gt; Output:<br>${result.output.trim()}`;
-            } else if (result.error) {
-                const formattedError = result.error.replace(/\n/g, '<br>');
-                consoleOutput.style.color = '#e74c3c';
-                consoleOutput.innerHTML = `&gt; Error:<br>${formattedError}`;
-            } else {
-                consoleOutput.style.color = '#ffffff';
-                consoleOutput.innerHTML = `&gt; Process finished with no output.`;
+        currentWebSocket.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+
+                if (msg.type === 'output' || msg.type === 'error') {
+                    if (msg.type === 'error') {
+                        consoleOutput.style.color = '#e74c3c';
+                    } else {
+                        consoleOutput.style.color = '#ffffff';
+                    }
+                    consoleOutput.innerText += msg.data;
+                    inputStartPos = consoleOutput.innerText.length;
+                    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                } else if (msg.type === 'close') {
+                    consoleOutput.innerText += `\n> Process exited with code ${msg.exitCode}.`;
+                    inputStartPos = consoleOutput.innerText.length;
+                    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                }
+            } catch (err) {
+                console.error('Error parsing message from server:', err);
             }
-        } catch (error) {
+        };
+
+        currentWebSocket.onerror = () => {
             consoleOutput.style.color = '#e74c3c';
-            if (error.name === 'AbortError') {
-                consoleOutput.innerHTML = `&gt; Execution stopped by user.`;
-            } else {
-                consoleOutput.innerHTML = `&gt; Connection Error: Unable to reach backend server.<br>${error.message}`;
-            }
-        } finally {
-            currentAbortController = null;
+            consoleOutput.innerText += `\n> WebSocket Connection Error. Make sure server.js is running.`;
+        };
+    });
+
+    // Handle terminal keyboard input (Enter key for scanf)
+    consoleOutput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && currentWebSocket && currentWebSocket.readyState === WebSocket.OPEN) {
+            e.preventDefault();
+
+            const currentText = consoleOutput.innerText;
+            const userInput = currentText.substring(inputStartPos);
+
+            consoleOutput.innerText += '\n';
+            inputStartPos = consoleOutput.innerText.length;
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+
+            currentWebSocket.send(JSON.stringify({
+                type: 'input',
+                data: userInput.trim()
+            }));
         }
     });
 
+    // Debug button
     if (debugBtn) {
         debugBtn.addEventListener('click', (e) => {
             e.preventDefault();
             consoleWrapper.classList.remove('hidden', 'collapsed');
             consoleOutput.style.color = '#f39c12';
-            consoleOutput.innerHTML = `&gt; Debugging mode active...<br>&gt; Syntax check passed.`;
+            consoleOutput.innerText = `> Debugging mode active...\n> Syntax check passed.`;
         });
     }
 
+    // Stop button
     if (stopBtn) {
         stopBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            if (currentAbortController) {
-                currentAbortController.abort();
+            if (currentWebSocket && currentWebSocket.readyState === WebSocket.OPEN) {
+                currentWebSocket.send(JSON.stringify({ type: 'stop' }));
+                currentWebSocket.close();
+                consoleOutput.style.color = '#e74c3c';
+                consoleOutput.innerText += `\n> Execution stopped by user.`;
             } else {
                 consoleWrapper.classList.remove('hidden', 'collapsed');
                 consoleOutput.style.color = '#e74c3c';
-                consoleOutput.innerHTML = `&gt; No active process to stop.`;
+                consoleOutput.innerText = `> No active process to stop.`;
             }
         });
     }
 
+    // Share button
     if (shareBtn) {
         shareBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -114,6 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Save button
     if (saveBtn) {
         saveBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -126,6 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Terminal toggles and resizing
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === '`') {
             e.preventDefault();
@@ -141,33 +187,27 @@ document.addEventListener('DOMContentLoaded', () => {
         closeTerminalBtn.addEventListener('click', () => consoleWrapper.classList.add('hidden'));
     }
 
-    // Terminal resize logic
     let isResizing = false;
     let startY = 0;
     let startHeight = 0;
 
-    resizeHandle.addEventListener('mousedown', (e) => {
-        if (consoleWrapper.classList.contains('collapsed') ||
-            consoleWrapper.classList.contains('hidden')) return;
-
-        isResizing = true;
-        startY = e.clientY;
-        startHeight = consoleWrapper.offsetHeight;
-        consoleWrapper.classList.add('resizing');
-        document.body.style.cursor = 'ns-resize';
-        e.preventDefault();
-    });
+    if (resizeHandle) {
+        resizeHandle.addEventListener('mousedown', (e) => {
+            if (consoleWrapper.classList.contains('collapsed') || consoleWrapper.classList.contains('hidden')) return;
+            isResizing = true;
+            startY = e.clientY;
+            startHeight = consoleWrapper.offsetHeight;
+            consoleWrapper.classList.add('resizing');
+            document.body.style.cursor = 'ns-resize';
+            e.preventDefault();
+        });
+    }
 
     document.addEventListener('mousemove', (e) => {
         if (!isResizing) return;
-
         const delta = startY - e.clientY;
         let newHeight = startHeight + delta;
-
-        const minHeight = 80;
-        const maxHeight = window.innerHeight * 0.7;
-        newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
-
+        newHeight = Math.max(80, Math.min(window.innerHeight * 0.7, newHeight));
         consoleWrapper.style.height = `${newHeight}px`;
     });
 
@@ -180,5 +220,4 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     codeArea.addEventListener('input', updateLineNumbers);
-    updateLineNumbers();
 });

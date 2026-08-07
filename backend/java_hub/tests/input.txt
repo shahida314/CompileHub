@@ -1,0 +1,29 @@
+class Main {
+    public static void main(String[] args) {
+print ("enter value: "); 
+        Scanner sc = new Scanner(System.in);
+        int n;
+        n = sc.nextInt();
+        int sum = 0;
+        
+    
+        for (int i = 1; i <= n; i++) {
+            sum = sum + i;
+        }
+        print sum;
+    }
+}
+
+
+/*public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter your age: ");
+        int age = scanner.nextInt();
+        System.out.println("Age: " + age);
+
+        System.out.print("Enter your name: ");
+        String name = scanner.nextLine();
+        System.out.println("Hello, " + name);
+    }
+}  */

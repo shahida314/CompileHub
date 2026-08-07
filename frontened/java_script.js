@@ -16,18 +16,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveBtn = document.getElementById('saveBtn');
     const consoleOutput = document.getElementById('consoleOutput');
 
-    // Terminal UI Controls
     const consoleWrapper = document.getElementById('consoleWrapper');
     const toggleTerminalBtn = document.getElementById('toggleTerminalBtn');
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
-    const resizeHandle = document.getElementById('consoleResizeHandle');
 
-    const BACKEND_URL = 'http://localhost:5000/api/compile/java';
-    // const BACKEND_URL = 'https://your-render-backend-url.onrender.com/api/compile/java';
+    const WS_URL = 'ws://localhost:5000';
 
-    let currentAbortController = null;
+    let socket = null;
+    let isRunning = false;
+    let currentInputEl = null;
 
-    // Set Default Java Code (persist across Live Server auto-reloads)
+    // ============================================================
+    // এই ফ্ল্যাগটাই মূল ফিক্স: শেষ যে টেক্সট আউটপুট হয়েছে সেটা newline
+    // (\n) দিয়ে শেষ হয়েছিল কিনা তা ট্র্যাক করে। এর উপর ভিত্তি করেই
+    // ঠিক হবে ইনপুট বক্স "পাশে পাশে" বসবে নাকি "নিচে নিচে" (নতুন লাইনে)।
+    // শুরুতে true রাখা হয়েছে যাতে প্রথম আউটপুট সবসময় নতুন লাইনেই শুরু হয়।
+    // ============================================================
+    let lastOutputEndsWithNewline = true;
+
     if (codeArea) {
         const savedCode = localStorage.getItem('compilehub_java_code');
         codeArea.value = savedCode ? savedCode : defaultJavaCode;
@@ -36,7 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Dynamic Helper for Formatting Text Output with Line Breaks
     function formatOutputText(text) {
         if (!text) return '';
         return text
@@ -47,7 +52,91 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/ /g, '&nbsp;');
     }
 
-    // Update Line Numbers dynamically
+    function appendToConsole(text, color = '#ffffff') {
+        if (!consoleOutput || !text) return;
+
+        if (currentInputEl) {
+            currentInputEl.remove();
+            currentInputEl = null;
+        }
+
+        const span = document.createElement('span');
+        span.style.color = color;
+        span.style.display = 'inline';
+        span.innerHTML = formatOutputText(text);
+
+        consoleOutput.appendChild(span);
+        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+
+        // এই আউটপুট টেক্সটটা \n দিয়ে শেষ হয়েছে কিনা — এই অনুযায়ী পরের
+        // ইনপুট বক্স পাশে বসবে নাকি নতুন লাইনে বসবে তা ঠিক হবে
+        lastOutputEndsWithNewline = text.endsWith('\n');
+    }
+
+    // ============================================================
+    // ইনপুট বক্স — println (newline সহ prompt) হলে নতুন লাইনে বসবে,
+    // print (newline ছাড়া prompt) হলে prompt-এর ঠিক পাশে বসবে।
+    // Enter চাপলে (real terminal-এর মতোই) একটা লাইন-ব্রেক তৈরি হবে।
+    // ============================================================
+    function createInlineInputPrompt() {
+        if (!consoleOutput || currentInputEl || !isRunning) return;
+
+        const inputField = document.createElement('input');
+        inputField.type = 'text';
+        inputField.className = 'inline-input';
+        inputField.autocomplete = 'off';
+
+        if (lastOutputEndsWithNewline) {
+            // আগের prompt println দিয়ে শেষ হয়েছিল → নতুন লাইনে (নিচে নিচে)
+            inputField.style.display = 'block';
+            inputField.style.width = '100%';
+            inputField.style.marginTop = '2px';
+        } else {
+            // আগের prompt print দিয়ে শেষ হয়েছিল (কোনো newline নেই) → পাশে পাশে
+            inputField.style.display = 'inline-block';
+            inputField.style.width = '140px';
+            inputField.style.verticalAlign = 'baseline';
+        }
+
+        consoleOutput.appendChild(inputField);
+        inputField.focus();
+        currentInputEl = inputField;
+
+        inputField.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const value = inputField.value;
+
+                // টাইপ করা মান inline span আকারে বসানো হচ্ছে, যাতে এটা
+                // prompt-এর ঠিক পাশে/জায়গায় বসে (block দিয়ে জোর করে
+                // নতুন লাইনে ঠেলে দেওয়া হচ্ছে না)
+                const textSpan = document.createElement('span');
+                textSpan.style.color = '#ffffff';
+                textSpan.style.display = 'inline';
+                textSpan.innerHTML = formatOutputText(value);
+
+                inputField.replaceWith(textSpan);
+                currentInputEl = null;
+
+                // Enter চাপাটাই বাস্তব terminal-এ একটা newline তৈরি করে —
+                // তাই এখানে একটা সত্যিকারের line-break যোগ করা হচ্ছে,
+                // এবং ফ্ল্যাগ true করে দেওয়া হচ্ছে
+                consoleOutput.appendChild(document.createElement('br'));
+                lastOutputEndsWithNewline = true;
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+
+                if (socket && socket.readyState === WebSocket.OPEN && isRunning) {
+                    socket.send(JSON.stringify({ type: 'input', data: value + '\n' }));
+                }
+
+                // পরের ইনপুট লাগতে পারে ধরে নিয়ে সাথে সাথেই আবার বক্স রেডি
+                // রাখা হচ্ছে, backend output-এর অপেক্ষা না করে
+                if (isRunning) {
+                    setTimeout(createInlineInputPrompt, 30);
+                }
+            }
+        });
+    }
+
     function updateLineNumbers() {
         if (!codeArea || !lineNumbers) return;
         const lines = codeArea.value.split('\n').length;
@@ -58,7 +147,6 @@ document.addEventListener('DOMContentLoaded', () => {
         lineNumbers.innerHTML = lineHTML;
     }
 
-    // Sync scroll between textarea and line numbers
     if (codeArea && lineNumbers) {
         codeArea.addEventListener('scroll', () => {
             lineNumbers.scrollTop = codeArea.scrollTop;
@@ -66,7 +154,6 @@ document.addEventListener('DOMContentLoaded', () => {
         codeArea.addEventListener('input', updateLineNumbers);
     }
 
-    // Language Dropdown Redirect
     if (languageSelect) {
         languageSelect.addEventListener('change', () => {
             const selectedLang = languageSelect.value;
@@ -77,84 +164,109 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Send Java Code to Render / Local Backend
+    function ensureSocket() {
+        if (socket && socket.readyState === WebSocket.OPEN) return socket;
+
+        socket = new WebSocket(WS_URL);
+
+        socket.addEventListener('message', (event) => {
+            let msg;
+            try {
+                msg = JSON.parse(event.data);
+            } catch (e) {
+                return;
+            }
+
+            if (msg.type === 'output') {
+                appendToConsole(msg.data, '#ffffff');
+                if (isRunning) {
+                    createInlineInputPrompt();
+                }
+            } else if (msg.type === 'error') {
+                appendToConsole(msg.data, '#e74c3c');
+            } else if (msg.type === 'exit') {
+                isRunning = false;
+
+                if (currentInputEl) {
+                    currentInputEl.remove();
+                    currentInputEl = null;
+                }
+
+                if (!lastOutputEndsWithNewline) {
+                    consoleOutput.appendChild(document.createElement('br'));
+                }
+
+                const exitLine = document.createElement('div');
+                exitLine.style.margin = '0';
+                exitLine.style.padding = '0';
+                exitLine.style.lineHeight = '1';
+
+                const codeVal = (msg.code !== null && msg.code !== undefined) ? msg.code : 0;
+
+                exitLine.innerHTML = `<span style="color: #ffffff; font-weight: bold; margin-right: 6px;">></span><span style="color: #ffffff;">Process exited with code ${codeVal}.</span>`;
+
+                consoleOutput.appendChild(exitLine);
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                lastOutputEndsWithNewline = true;
+            }
+        });
+
+        socket.addEventListener('close', () => {
+            socket = null;
+        });
+
+        socket.addEventListener('error', () => {
+            appendToConsole('\n> Connection Error: Unable to reach backend server.\n', '#e74c3c');
+        });
+
+        return socket;
+    }
+
     if (runBtn) {
-        runBtn.addEventListener('click', async () => {
+        runBtn.addEventListener('click', () => {
             if (consoleWrapper) {
                 consoleWrapper.classList.remove('hidden', 'collapsed');
             }
             if (consoleOutput) {
-                consoleOutput.style.color = '#27ae60';
-                consoleOutput.innerHTML = `&gt; Compiling and executing JAVA code...<br>&gt; `;
+                consoleOutput.innerHTML = '';
             }
 
+            lastOutputEndsWithNewline = true;
+
             const code = codeArea ? codeArea.value : '';
-            currentAbortController = new AbortController();
+            const ws = ensureSocket();
 
-            try {
-                const response = await fetch(BACKEND_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ code }),
-                    signal: currentAbortController.signal
-                });
+            const sendRun = () => {
+                ws.send(JSON.stringify({ type: 'run', code }));
+                isRunning = true;
+            };
 
-                const result = await response.json();
-
-                if (result.output) {
-                    consoleOutput.style.color = '#e0e0e0';
-                    consoleOutput.innerHTML = `&gt; Output:<br>${formatOutputText(result.output)}`;
-                } else if (result.error) {
-                    consoleOutput.style.color = '#e74c3c';
-                    consoleOutput.innerHTML = `&gt; Error:<br>${formatOutputText(result.error)}`;
-                } else {
-                    consoleOutput.style.color = '#f39c12';
-                    consoleOutput.innerHTML = `&gt; Program finished with no output.`;
-                }
-            } catch (error) {
-                if (consoleOutput) {
-                    consoleOutput.style.color = '#e74c3c';
-                    if (error.name === 'AbortError') {
-                        consoleOutput.innerHTML = `&gt; Execution stopped by user.`;
-                    } else {
-                        consoleOutput.innerHTML = `&gt; Connection Error: Unable to reach backend server.<br>${error.message}`;
-                    }
-                }
-            } finally {
-                currentAbortController = null;
+            if (ws.readyState === WebSocket.OPEN) {
+                sendRun();
+            } else {
+                ws.addEventListener('open', sendRun, { once: true });
             }
         });
     }
 
-    // Debug Button
     if (debugBtn) {
         debugBtn.addEventListener('click', (e) => {
             e.preventDefault();
             if (consoleWrapper) consoleWrapper.classList.remove('hidden', 'collapsed');
-            if (consoleOutput) {
-                consoleOutput.style.color = '#f39c12';
-                consoleOutput.innerHTML = `&gt; Debugging mode active...<br>&gt; Syntax check passed.`;
-            }
+            appendToConsole('> Debugging mode active...\n> Syntax check passed.\n', '#ffffff');
         });
     }
 
-    // Stop Button
     if (stopBtn) {
         stopBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            if (currentAbortController) {
-                currentAbortController.abort();
-            } else if (consoleOutput) {
-                if (consoleWrapper) consoleWrapper.classList.remove('hidden', 'collapsed');
-                consoleOutput.style.color = '#e74c3c';
-                consoleOutput.innerHTML = `&gt; No active process to stop.`;
+            if (socket && socket.readyState === WebSocket.OPEN && isRunning) {
+                socket.send(JSON.stringify({ type: 'stop' }));
+                isRunning = false;
             }
         });
     }
 
-    // Share Button
     if (shareBtn) {
         shareBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -163,7 +275,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Save Button
     if (saveBtn) {
         saveBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -177,7 +288,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Keyboard Shortcut (Ctrl + `) to toggle terminal
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === '`') {
             e.preventDefault();
@@ -188,60 +298,59 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Minimize / Expand Terminal
     if (toggleTerminalBtn && consoleWrapper) {
         toggleTerminalBtn.addEventListener('click', () => {
             consoleWrapper.classList.toggle('collapsed');
         });
     }
 
-    // Close Terminal
     if (closeTerminalBtn && consoleWrapper) {
         closeTerminalBtn.addEventListener('click', () => {
             consoleWrapper.classList.add('hidden');
         });
     }
 
-    // ===== Drag-to-resize terminal (like a normal IDE) =====
-    let isResizing = false;
-    let startY = 0;
-    let startHeight = 0;
+    updateLineNumbers();
+
+    // ============================================================
+    // TERMINAL RESIZE DRAG (আগের ফিক্স অপরিবর্তিত)
+    // ============================================================
+    const resizeHandle = document.getElementById('consoleResizeHandle');
 
     if (resizeHandle && consoleWrapper) {
-        resizeHandle.addEventListener('mousedown', (e) => {
-            if (consoleWrapper.classList.contains('collapsed') ||
-                consoleWrapper.classList.contains('hidden')) return;
+        let isResizing = false;
+        let startY = 0;
+        let startHeight = 0;
 
+        resizeHandle.addEventListener('mousedown', function (e) {
+            e.preventDefault();
             isResizing = true;
             startY = e.clientY;
-            startHeight = consoleWrapper.offsetHeight;
+            startHeight = consoleWrapper.getBoundingClientRect().height;
             consoleWrapper.classList.add('resizing');
             document.body.style.cursor = 'ns-resize';
-            e.preventDefault();
+            document.body.style.userSelect = 'none';
         });
 
-        document.addEventListener('mousemove', (e) => {
+        document.addEventListener('mousemove', function (e) {
             if (!isResizing) return;
 
-            const delta = startY - e.clientY;
-            let newHeight = startHeight + delta;
-
-            const minHeight = 80;
+            const dy = startY - e.clientY;
+            let newHeight = startHeight + dy;
             const maxHeight = window.innerHeight * 0.7;
-            newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
+            const minHeight = 60;
 
+            newHeight = Math.min(Math.max(newHeight, minHeight), maxHeight);
             consoleWrapper.style.height = `${newHeight}px`;
         });
 
-        document.addEventListener('mouseup', () => {
+        document.addEventListener('mouseup', function () {
             if (isResizing) {
                 isResizing = false;
                 consoleWrapper.classList.remove('resizing');
-                document.body.style.cursor = '';
+                document.body.style.cursor = 'default';
+                document.body.style.userSelect = 'auto';
             }
         });
     }
-
-    // Initial Line Numbers Setup
-    updateLineNumbers();
 });

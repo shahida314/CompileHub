@@ -3,10 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 typedef enum { NODE_DECL, NODE_ASSIGN, NODE_BINOP, NODE_UNOP, NODE_VAR, NODE_NUM,
                NODE_IF, NODE_WHILE, NODE_PRINT, NODE_BLOCK,
-               NODE_STR, NODE_CALL, NODE_RETURN } NodeType;
+               NODE_STR, NODE_CALL, NODE_RETURN, NODE_INC } NodeType;
 
 typedef struct ASTNode {
     NodeType type;
@@ -19,7 +18,6 @@ typedef struct ASTNode {
 } ASTNode;
 
 ASTNode* create_node(NodeType type, const char* val, ASTNode* left, ASTNode* right);
-/* ------------------------------------------------------------------ */
 
 int yylex();
 void yyerror(const char *s);
@@ -34,15 +32,17 @@ ASTNode *root = NULL;
 }
 
 %token <str_val> INT FLOAT BOOL IDENTIFIER INT_LITERAL FLOAT_LITERAL STRING_LITERAL
-%token IF ELSE WHILE PRINT TRUE FALSE
-%token CLASS PUBLIC STATIC VOID STRING_TYPE SYSTEM_KW RETURN
+%token IF ELSE WHILE FOR PRINT TRUE FALSE
+%token CLASS PUBLIC STATIC VOID STRING_TYPE SYSTEM_KW RETURN NEW SCANNER
 %token PLUS MINUS MULT DIV MOD ASSIGN
 %token EQ NEQ LT GT LE GE AND OR NOT
 %token SEMICOLON COMMA DOT LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET
+%token INC
 
-%type <node> program class_decl member_list member main_method func_decl
-%type <node> param_list param_list_opt
-%type <node> stmt_list stmt block decl_stmt assign_stmt if_stmt while_stmt func_stmt
+%type <node> program class_decl member_list member func_decl
+%type <node> param_list param_list_opt param
+%type <node> stmt_list stmt block decl_stmt assign_stmt if_stmt while_stmt func_stmt for_stmt
+%type <node> for_init for_update scanner_decl
 %type <node> print_stmt println_stmt return_stmt call_stmt
 %type <node> expr expr_list expr_list_opt
 %type <str_val> type_spec
@@ -54,7 +54,7 @@ ASTNode *root = NULL;
 %nonassoc LT GT LE GE
 %left PLUS MINUS
 %left MULT DIV MOD
-%right NOT UMINUS
+%right NOT UMINUS INC
 
 %%
 
@@ -62,8 +62,10 @@ program:
       class_decl { root = $1; }
     | stmt_list  { root = $1; }
     ;
+
 class_decl:
       CLASS IDENTIFIER LBRACE member_list RBRACE { $$ = $4; }
+    | PUBLIC CLASS IDENTIFIER LBRACE member_list RBRACE { $$ = $5; }
     ;
 
 member_list:
@@ -76,14 +78,11 @@ member_list:
         }
     ;
 
+/* main_method আলাদা rule হিসেবে আর নেই — এখন main এবং অন্য যেকোনো ফাংশন
+   একই func_decl rule দিয়ে ধরা পড়ে। এটাই আগের VOID-সম্পর্কিত
+   shift/reduce conflict সম্পূর্ণ দূর করে দেয়। */
 member:
-      main_method   { $$ = $1; }
-    | func_decl     { $$ = $1; }
-    ;
-
-main_method:
-      PUBLIC STATIC VOID IDENTIFIER LPAREN STRING_TYPE LBRACKET RBRACKET IDENTIFIER RPAREN block
-        { $$ = create_node(NODE_BLOCK, "main", $11, NULL); }
+      func_decl     { $$ = $1; }
     ;
 
 func_decl:
@@ -109,18 +108,31 @@ param_list_opt:
     ;
 
 param_list:
+      param {
+            $$ = $1;
+        }
+    | param_list COMMA param {
+            ASTNode *n = $1;
+            while (n->next) n = n->next;
+            n->next = $3;
+            $$ = $1;
+        }
+    ;
+
+/* সাধারণ parameter (int x, float y, String s, ...) এবং main-এর বিশেষ
+   "String[] args" প্যাটার্ন — দুটোই এখন এই একই param rule দিয়ে ধরা পড়ে।
+   STRING_TYPE-এর পরে LBRACKET এলে array-ফর্ম, IDENTIFIER এলে সাধারণ param —
+   এই দুই লুকঅ্যাহেড টোকেন ভিন্ন হওয়ায় parser-এর কোনো conflict হয় না। */
+param:
       type_spec IDENTIFIER {
             ASTNode *n = create_node(NODE_DECL, $2, NULL, NULL);
             strcpy(n->data_type, $1);
             $$ = n;
         }
-    | param_list COMMA type_spec IDENTIFIER {
+    | STRING_TYPE LBRACKET RBRACKET IDENTIFIER {
             ASTNode *n = create_node(NODE_DECL, $4, NULL, NULL);
-            strcpy(n->data_type, $3);
-            ASTNode *p = $1;
-            while (p->next) p = p->next;
-            p->next = n;
-            $$ = $1;
+            strcpy(n->data_type, "String[]");
+            $$ = n;
         }
     ;
 
@@ -131,7 +143,7 @@ block:
 
 stmt_list:
       stmt               { $$ = $1; }
-    | stmt_list stmt      {
+    | stmt_list stmt     {
             ASTNode *n = $1;
             while (n->next) n = n->next;
             n->next = $2;
@@ -144,12 +156,18 @@ stmt:
     | assign_stmt    { $$ = $1; }
     | if_stmt        { $$ = $1; }
     | while_stmt     { $$ = $1; }
+    | for_stmt       { $$ = $1; }
     | print_stmt     { $$ = $1; }
     | println_stmt   { $$ = $1; }
     | return_stmt    { $$ = $1; }
     | call_stmt      { $$ = $1; }
     | func_stmt      { $$ = $1; }
+    | scanner_decl   { $$ = $1; }
     | block          { $$ = $1; }
+    | IDENTIFIER INC SEMICOLON {
+            ASTNode *var = create_node(NODE_VAR, $1, NULL, NULL);
+            $$ = create_node(NODE_INC, $1, var, NULL);
+        }
     ;
 
 decl_stmt:
@@ -191,6 +209,54 @@ while_stmt:
         { $$ = create_node(NODE_WHILE, "while", $3, $5); }
     ;
 
+for_init:
+      type_spec IDENTIFIER ASSIGN expr SEMICOLON {
+            ASTNode *decl = create_node(NODE_DECL, $2, NULL, NULL);
+            strcpy(decl->data_type, $1);
+            ASTNode *var = create_node(NODE_VAR, $2, NULL, NULL);
+            ASTNode *asg = create_node(NODE_ASSIGN, $2, var, $4);
+            decl->next = asg;
+            $$ = decl;
+        }
+    | IDENTIFIER ASSIGN expr SEMICOLON {
+            ASTNode *var = create_node(NODE_VAR, $1, NULL, NULL);
+            $$ = create_node(NODE_ASSIGN, $1, var, $3);
+        }
+    ;
+
+for_update:
+      IDENTIFIER ASSIGN expr {
+            ASTNode *var = create_node(NODE_VAR, $1, NULL, NULL);
+            $$ = create_node(NODE_ASSIGN, $1, var, $3);
+        }
+    | IDENTIFIER INC {
+            ASTNode *var = create_node(NODE_VAR, $1, NULL, NULL);
+            $$ = create_node(NODE_INC, $1, var, NULL);
+        }
+    ;
+
+for_stmt:
+      FOR LPAREN for_init expr SEMICOLON for_update RPAREN block
+        {
+            ASTNode *while_node = create_node(NODE_WHILE, "while", $4, $8);
+
+            ASTNode *blk_stmts = $8->left;
+            if (blk_stmts) {
+                ASTNode *n = blk_stmts;
+                while (n->next) n = n->next;
+                n->next = $6;
+            } else {
+                $8->left = $6;
+            }
+
+            ASTNode *n2 = $3;
+            while (n2->next) n2 = n2->next;
+            n2->next = while_node;
+
+            $$ = $3;
+        }
+    ;
+
 func_stmt:
       type_spec IDENTIFIER LPAREN param_list_opt RPAREN block
         {
@@ -201,12 +267,20 @@ func_stmt:
     ;
 
 print_stmt:
-      PRINT expr SEMICOLON
-        { $$ = create_node(NODE_PRINT, "print", $2, NULL); }
+    PRINT expr SEMICOLON
+    { $$ = create_node(NODE_PRINT, "printnl", $2, NULL); }
     ;
+
+
 println_stmt:
       SYSTEM_KW DOT IDENTIFIER DOT IDENTIFIER LPAREN expr RPAREN SEMICOLON
-        { $$ = create_node(NODE_PRINT, "println", $7, NULL); }
+        { $$ = create_node(NODE_PRINT, $5, $7, NULL); }
+    | SYSTEM_KW DOT IDENTIFIER DOT IDENTIFIER LPAREN RPAREN SEMICOLON
+        { $$ = create_node(NODE_PRINT, $5, NULL, NULL); }
+    | SYSTEM_KW DOT IDENTIFIER DOT PRINT LPAREN expr RPAREN SEMICOLON
+        { $$ = create_node(NODE_PRINT, "print", $7, NULL); }
+    | SYSTEM_KW DOT IDENTIFIER DOT PRINT LPAREN RPAREN SEMICOLON
+        { $$ = create_node(NODE_PRINT, "print", NULL, NULL); }
     ;
 
 return_stmt:
@@ -221,9 +295,14 @@ call_stmt:
         { $$ = create_node(NODE_CALL, $1, $3, NULL); }
     ;
 
+scanner_decl:
+      SCANNER IDENTIFIER ASSIGN NEW SCANNER LPAREN SYSTEM_KW DOT IDENTIFIER RPAREN SEMICOLON
+        { $$ = create_node(NODE_BLOCK, "noop", NULL, NULL); }
+    ;
+
 expr_list_opt:
-      /* empty */  { $$ = NULL; }
-    | expr_list    { $$ = $1; }
+      /* empty */   { $$ = NULL; }
+    | expr_list     { $$ = $1; }
     ;
 
 expr_list:
@@ -255,8 +334,14 @@ expr:
     | MINUS expr %prec UMINUS { $$ = create_node(NODE_UNOP, "-", $2, NULL); }
     | NOT expr          { $$ = create_node(NODE_UNOP, "!", $2, NULL); }
     | LPAREN expr RPAREN { $$ = $2; }
+    | IDENTIFIER INC    {
+            ASTNode *var = create_node(NODE_VAR, $1, NULL, NULL);
+            $$ = create_node(NODE_INC, $1, var, NULL);
+        }
     | IDENTIFIER LPAREN expr_list_opt RPAREN
         { $$ = create_node(NODE_CALL, $1, $3, NULL); }
+    | IDENTIFIER DOT IDENTIFIER LPAREN RPAREN
+        { $$ = create_node(NODE_CALL, $3, NULL, NULL); }
     | IDENTIFIER        { $$ = create_node(NODE_VAR, $1, NULL, NULL); }
     | INT_LITERAL        { $$ = create_node(NODE_NUM, $1, NULL, NULL); strcpy($$->data_type, "int"); }
     | FLOAT_LITERAL       { $$ = create_node(NODE_NUM, $1, NULL, NULL); strcpy($$->data_type, "float"); }

@@ -11,16 +11,17 @@ void yyerror(const char *s);
 %option yylineno
 
 %%
-
-"//".*                  { }
+"import"[ \t]+[a-zA-Z0-9_\.]+\;   { /* import statement ignore */ }
+"//".*                   { }
 "/*"([^*]|\*+[^/*])*\*+"/" { }
 
 "int"       { yylval.str_val = strdup(yytext); return INT; }
 "float"     { yylval.str_val = strdup(yytext); return FLOAT; }
-"bool"      { yylval.str_val = strdup(yytext); return BOOL; }
+"bool"|"boolean" { yylval.str_val = strdup("bool"); return BOOL; }
 "if"        { return IF; }
 "else"      { return ELSE; }
 "while"     { return WHILE; }
+"for"       { return FOR; }
 "print"     { return PRINT; }
 "true"      { return TRUE; }
 "false"     { return FALSE; }
@@ -32,6 +33,8 @@ void yyerror(const char *s);
 "String"    { return STRING_TYPE; }
 "System"    { return SYSTEM_KW; }
 "return"    { return RETURN; }
+"new"       { return NEW; }
+"Scanner"   { return SCANNER; }
 
 "+"         { return PLUS; }
 "-"         { return MINUS; }
@@ -39,7 +42,7 @@ void yyerror(const char *s);
 "/"         { return DIV; }
 "%"         { return MOD; }
 "="         { return ASSIGN; }
-
+"++"        { return INC; }
 "=="        { return EQ; }
 "!="        { return NEQ; }
 "<"         { return LT; }
@@ -66,8 +69,8 @@ void yyerror(const char *s);
     return STRING_LITERAL;
 }
 
-[0-9]+\.[0-9]+ { yylval.str_val = strdup(yytext); return FLOAT_LITERAL; }
-[0-9]+         { yylval.str_val = strdup(yytext); return INT_LITERAL; }
+[0-9]+\.[0-9]+([fF])? { yylval.str_val = strdup(yytext); return FLOAT_LITERAL; }
+[0-9]+                 { yylval.str_val = strdup(yytext); return INT_LITERAL; }
 
 [a-zA-Z_][a-zA-Z0-9_]* { yylval.str_val = strdup(yytext); return IDENTIFIER; }
 

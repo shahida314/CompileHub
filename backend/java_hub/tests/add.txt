@@ -1,0 +1,34 @@
+class Main {
+    public static void main(String[] args) {
+        int a = 20;
+        int b = 10;
+        int sum= a+b;
+         print sum;
+        int sub= a-b;
+      print sub;
+     int mul= a*b;
+      print mul;
+        int div = a / b;
+        print div;
+      
+            }
+}
+
+/*class Main {
+    public static void main(String[] args) {
+        int a = 20;
+        int b = 10;
+
+        int sum = a + b;
+        print "sum:" + sum;
+
+        int sub = a - b;
+        print "sub:" + sub;
+
+        int mul = a * b;
+        print "mul:" + mul;
+
+        int div = a / b;
+        print "div:" + div;
+    }
+}  */

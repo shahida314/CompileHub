@@ -2,9 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+void print_processed_string(const char *str);
+
 typedef enum { NODE_DECL, NODE_ASSIGN, NODE_BINOP, NODE_UNOP, NODE_VAR, NODE_NUM,
                NODE_IF, NODE_WHILE, NODE_PRINT, NODE_BLOCK,
-               NODE_STR, NODE_CALL, NODE_RETURN } NodeType;
+               NODE_STR, NODE_CALL, NODE_RETURN, NODE_INC } NodeType;
 
 typedef struct ASTNode {
     NodeType type;
@@ -38,6 +40,34 @@ static int runtime_var_count = 0;
 static int returning = 0;
 static double return_value = 0;
 
+// ---------------- STRING CONCAT BUFFER POOL ----------------
+// "text" + variable + variable ... এই ধরনের concatenation-এর জন্য
+// rotating static buffer pool। নেস্টেড concatenation (a+b+c) হলেও
+// প্রতিটা কল আলাদা buffer পায়, একটা আরেকটাকে overwrite করে না
+// (যতক্ষণ না nesting depth ১৬-এর বেশি হয়, যা সাধারণ প্রোগ্রামে হয় না)
+#define STR_POOL_COUNT 16
+#define STR_POOL_SIZE  512
+static char str_buf_pool[STR_POOL_COUNT][STR_POOL_SIZE];
+static int str_buf_idx = 0;
+
+static char* next_concat_buf(void) {
+    char *b = str_buf_pool[str_buf_idx];
+    str_buf_idx = (str_buf_idx + 1) % STR_POOL_COUNT;
+    b[0] = '\0';
+    return b;
+}
+// -------------------------------------------------------------
+
+// ---------------- FORWARD DECLARATIONS ----------------
+double eval_expr_rt(ASTNode *node);
+int is_string_node(ASTNode *node);
+const char* get_expr_string(ASTNode *node);
+const char* node_to_string(ASTNode *node);
+double call_function(const char *name, ASTNode *args);
+void exec_stmt_list_rt(ASTNode *node);
+void exec_stmt_rt(ASTNode *node);
+// --------------------------------------------------------
+
 void set_runtime_var(const char *name, double value) {
     for (int i = 0; i < runtime_var_count; i++) {
         if (strcmp(runtime_vars[i].name, name) == 0) {
@@ -64,14 +94,20 @@ double get_runtime_var(const char *name) {
 void declare_runtime_var(const char *name, const char *type) {
     for (int i = 0; i < runtime_var_count; i++) {
         if (strcmp(runtime_vars[i].name, name) == 0) {
-            strcpy(runtime_vars[i].type, type);
+            if (type && strlen(type) > 0) {
+                strcpy(runtime_vars[i].type, type);
+            }
             return;
         }
     }
     strcpy(runtime_vars[runtime_var_count].name, name);
     runtime_vars[runtime_var_count].value = 0;
     runtime_vars[runtime_var_count].str_value[0] = '\0';
-    strcpy(runtime_vars[runtime_var_count].type, type);
+    if (type && strlen(type) > 0) {
+        strcpy(runtime_vars[runtime_var_count].type, type);
+    } else {
+        strcpy(runtime_vars[runtime_var_count].type, "int");
+    }
     runtime_var_count++;
 }
 
@@ -108,23 +144,110 @@ const char* get_runtime_var_str(const char *name) {
     return "";
 }
 
+// ---------------- INPUT FUNCTIONS ----------------
+
+double scanner_read_number(void) {
+    double v = 0;
+    if (scanf(" %lf", &v) != 1) v = 0;
+    return v;
+}
+
+int scanner_read_bool(void) {
+    char buf[16] = {0};
+    if (scanf(" %15s", buf) != 1) return 0;
+    return (strcmp(buf, "true") == 0 || strcmp(buf, "1") == 0);
+}
+
+const char* scanner_read_line(void) {
+    static char buf[256];
+    buf[0] = '\0';
+
+    int c = getchar();
+    while (c == '\n' || c == '\r') {
+        c = getchar();
+    }
+
+    int i = 0;
+    while (c != EOF && c != '\n' && c != '\r' && i < 255) {
+        buf[i++] = (char)c;
+        c = getchar();
+    }
+    buf[i] = '\0';
+    return buf;
+}
+
+const char* scanner_read_token(void) {
+    static char buf[256];
+    if (scanf(" %255s", buf) != 1) buf[0] = '\0';
+    return buf;
+}
+// ---------------------------------------------------------
+
 int is_string_node(ASTNode *node) {
     if (!node) return 0;
     if (node->type == NODE_STR) return 1;
     if (node->type == NODE_VAR) {
         return strcmp(get_runtime_var_type(node->value), "String") == 0;
     }
+    if (node->type == NODE_CALL &&
+        (strcmp(node->value, "nextLine") == 0 || strcmp(node->value, "next") == 0)) {
+        return 1;
+    }
+    // "+" দিয়ে যদি কোনো একপাশ String হয়, তাহলে পুরো expression-ই string concatenation
+    if (node->type == NODE_BINOP && strcmp(node->value, "+") == 0) {
+        return is_string_node(node->left) || is_string_node(node->right);
+    }
     return 0;
+}
+
+// যেকোনো নোডকে (string/int/float/bool) স্ট্রিং হিসেবে রূপান্তর করে —
+// concatenation-এ ব্যবহারের জন্য
+const char* node_to_string(ASTNode *node) {
+    if (!node) return "";
+
+    if (is_string_node(node)) {
+        return get_expr_string(node);
+    }
+
+    double val = eval_expr_rt(node);
+    const char *type = node->data_type;
+    if (node->type == NODE_VAR) {
+        type = get_runtime_var_type(node->value);
+    }
+
+    char *buf = next_concat_buf();
+    if (strcmp(type, "bool") == 0 || strcmp(type, "boolean") == 0) {
+        snprintf(buf, STR_POOL_SIZE, "%s", val != 0 ? "true" : "false");
+    } else if (strcmp(type, "float") == 0 || strcmp(type, "double") == 0) {
+        snprintf(buf, STR_POOL_SIZE, "%g", val);
+    } else {
+        snprintf(buf, STR_POOL_SIZE, "%ld", (long)val);
+    }
+    return buf;
 }
 
 const char* get_expr_string(ASTNode *node) {
     if (!node) return "";
     if (node->type == NODE_STR) return node->value;
     if (node->type == NODE_VAR) return get_runtime_var_str(node->value);
+    if (node->type == NODE_CALL) {
+        if (strcmp(node->value, "nextLine") == 0) return scanner_read_line();
+        if (strcmp(node->value, "next") == 0) return scanner_read_token();
+    }
+    // String concatenation: "text" + var + var ...
+    if (node->type == NODE_BINOP && strcmp(node->value, "+") == 0) {
+        char *buf = next_concat_buf();
+        const char *l = node_to_string(node->left);
+        strncpy(buf, l, STR_POOL_SIZE - 1);
+        buf[STR_POOL_SIZE - 1] = '\0';
+
+        const char *r = node_to_string(node->right);
+        strncat(buf, r, STR_POOL_SIZE - strlen(buf) - 1);
+
+        return buf;
+    }
     return "";
 }
-
-double call_function(const char *name, ASTNode *args);
 
 double eval_expr_rt(ASTNode *node) {
     if (!node) return 0;
@@ -140,7 +263,21 @@ double eval_expr_rt(ASTNode *node) {
             return get_runtime_var(node->value);
 
         case NODE_CALL:
+            if (strcmp(node->value, "nextInt") == 0 ||
+                strcmp(node->value, "nextDouble") == 0 ||
+                strcmp(node->value, "nextFloat") == 0) {
+                return scanner_read_number();
+            }
+            if (strcmp(node->value, "nextBoolean") == 0) {
+                return scanner_read_bool();
+            }
             return call_function(node->value, node->left);
+
+        case NODE_INC: {
+            double val = get_runtime_var(node->value);
+            set_runtime_var(node->value, val + 1);
+            return val + 1;
+        }
 
         case NODE_UNOP:
             l = eval_expr_rt(node->left);
@@ -171,22 +308,23 @@ double eval_expr_rt(ASTNode *node) {
     }
 }
 
-void print_runtime_value(ASTNode *expr_node, double val) {
+void print_runtime_value(ASTNode *expr_node, double val, int add_newline) {
     const char *type = expr_node->data_type;
     if (expr_node->type == NODE_VAR) {
         type = get_runtime_var_type(expr_node->value);
     }
-    if (strcmp(type, "bool") == 0) {
-        printf("%s\n", val != 0 ? "true" : "false");
-    } else if (strcmp(type, "float") == 0) {
-        printf("%g\n", val);
-    } else {
-        printf("%ld\n", (long)val);
-    }
-}
 
-void exec_stmt_list_rt(ASTNode *node);
-void exec_stmt_rt(ASTNode *node);
+    const char *fmt_suffix = add_newline ? "\n" : "";
+
+    if (strcmp(type, "bool") == 0 || strcmp(type, "boolean") == 0) {
+        printf("%s%s", val != 0 ? "true" : "false", fmt_suffix);
+    } else if (strcmp(type, "float") == 0 || strcmp(type, "double") == 0) {
+        printf("%g%s", val, fmt_suffix);
+    } else {
+        printf("%ld%s", (long)val, fmt_suffix);
+    }
+    fflush(stdout);
+}
 
 double call_function(const char *name, ASTNode *args) {
     ASTNode *params = get_function_params(name);
@@ -194,6 +332,7 @@ double call_function(const char *name, ASTNode *args) {
 
     if (!body) {
         fprintf(stderr, "Runtime Error: function '%s' not found\n", name);
+        fflush(stderr);
         return 0;
     }
 
@@ -265,14 +404,30 @@ void exec_stmt_rt(ASTNode *node) {
             }
             break;
 
-        case NODE_PRINT:
-            if (is_string_node(node->left)) {
-                printf("%s\n", get_expr_string(node->left));
+        case NODE_INC:
+            eval_expr_rt(node);
+            break;
+
+        case NODE_PRINT: {
+    int add_newline = (strcmp(node->value, "println") == 0 ||
+                        strcmp(node->value, "printnl") == 0);
+
+            if (node->left == NULL) {
+                if (add_newline) {
+                    printf("\n");
+                }
+            } else if (is_string_node(node->left)) {
+                print_processed_string(get_expr_string(node->left));
+                if (add_newline) {
+                    printf("\n");
+                }
             } else {
                 val = eval_expr_rt(node->left);
-                print_runtime_value(node->left, val);
+                print_runtime_value(node->left, val, add_newline);
             }
+            fflush(stdout);
             break;
+        }
 
         case NODE_BLOCK:
             exec_stmt_list_rt(node->left);
@@ -307,6 +462,21 @@ void exec_stmt_rt(ASTNode *node) {
     }
 }
 
+void print_processed_string(const char *str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        if (str[i] == '\\' && str[i+1] == 'n') {
+            printf("\n");
+            i++;
+        } else if (str[i] == '\\' && str[i+1] == 't') {
+            printf("\t");
+            i++;
+        } else {
+            putchar(str[i]);
+        }
+    }
+    fflush(stdout);
+}
+
 void exec_stmt_list_rt(ASTNode *node) {
     while (node && !returning) {
         exec_stmt_rt(node);
@@ -319,8 +489,8 @@ void run_program(ASTNode *root) {
     ASTNode *main_body = NULL;
 
     while (n) {
-        if (n->type == NODE_BLOCK && strcmp(n->value, "main") == 0) {
-            main_body = n->left;
+        if (n->type == NODE_CALL && strcmp(n->value, "main") == 0) {
+            main_body = n->right;
         } else if (n->type == NODE_CALL && n->right != NULL) {
             register_function(n->value, n->data_type, n->left, n->right);
         }
@@ -339,6 +509,9 @@ extern FILE *yyin;
 extern ASTNode *root;
 
 int main(int argc, char *argv[]) {
+    setbuf(stdout, NULL);
+    setbuf(stderr, NULL);
+
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <source_file>\n", argv[0]);
         return 1;
@@ -362,3 +535,5 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+    
+   
