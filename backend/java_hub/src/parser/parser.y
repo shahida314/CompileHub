@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 typedef enum { NODE_DECL, NODE_ASSIGN, NODE_BINOP, NODE_UNOP, NODE_VAR, NODE_NUM,
                NODE_IF, NODE_WHILE, NODE_PRINT, NODE_BLOCK,
                NODE_STR, NODE_CALL, NODE_RETURN, NODE_INC } NodeType;
@@ -19,7 +18,6 @@ typedef struct ASTNode {
 } ASTNode;
 
 ASTNode* create_node(NodeType type, const char* val, ASTNode* left, ASTNode* right);
-/* ------------------------------------------------------------------ */
 
 int yylex();
 void yyerror(const char *s);
@@ -64,6 +62,7 @@ program:
       class_decl { root = $1; }
     | stmt_list  { root = $1; }
     ;
+
 class_decl:
       CLASS IDENTIFIER LBRACE member_list RBRACE { $$ = $4; }
     | PUBLIC CLASS IDENTIFIER LBRACE member_list RBRACE { $$ = $5; }
@@ -134,7 +133,7 @@ block:
 
 stmt_list:
       stmt               { $$ = $1; }
-    | stmt_list stmt      {
+    | stmt_list stmt     {
             ASTNode *n = $1;
             while (n->next) n = n->next;
             n->next = $2;
@@ -257,13 +256,26 @@ func_stmt:
         }
     ;
 
+/* কাস্টম "print" কিওয়ার্ড (Java-এর System.out.print নয়) — newline ছাড়া প্রিন্ট করে */
 print_stmt:
       PRINT expr SEMICOLON
         { $$ = create_node(NODE_PRINT, "print", $2, NULL); }
     ;
+
+/* System.out.print(...) এবং System.out.println(...) — সব ধরনের কেস কভার করা হলো:
+   ১. argument সহ println/print (আগে থেকেই ছিল)
+   ২. argument ছাড়া println() / print() — খালি parentheses (NEW)
+   lexer.l-এ "print" শব্দটা IDENTIFIER না হয়ে PRINT token হিসেবে আসে বলে
+   PRINT token-এর জন্য আলাদা rule রাখা হয়েছে। */
 println_stmt:
       SYSTEM_KW DOT IDENTIFIER DOT IDENTIFIER LPAREN expr RPAREN SEMICOLON
-        { $$ = create_node(NODE_PRINT, "println", $7, NULL); }
+        { $$ = create_node(NODE_PRINT, $5, $7, NULL); }
+    | SYSTEM_KW DOT IDENTIFIER DOT IDENTIFIER LPAREN RPAREN SEMICOLON
+        { $$ = create_node(NODE_PRINT, $5, NULL, NULL); }
+    | SYSTEM_KW DOT IDENTIFIER DOT PRINT LPAREN expr RPAREN SEMICOLON
+        { $$ = create_node(NODE_PRINT, "print", $7, NULL); }
+    | SYSTEM_KW DOT IDENTIFIER DOT PRINT LPAREN RPAREN SEMICOLON
+        { $$ = create_node(NODE_PRINT, "print", NULL, NULL); }
     ;
 
 return_stmt:
@@ -272,6 +284,7 @@ return_stmt:
     | RETURN SEMICOLON
         { $$ = create_node(NODE_RETURN, "return", NULL, NULL); }
     ;
+
 call_stmt:
       IDENTIFIER LPAREN expr_list_opt RPAREN SEMICOLON
         { $$ = create_node(NODE_CALL, $1, $3, NULL); }
@@ -284,7 +297,7 @@ scanner_decl:
 
 expr_list_opt:
       /* empty */   { $$ = NULL; }
-    | expr_list    { $$ = $1; }
+    | expr_list     { $$ = $1; }
     ;
 
 expr_list:

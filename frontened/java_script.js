@@ -16,7 +16,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveBtn = document.getElementById('saveBtn');
     const consoleOutput = document.getElementById('consoleOutput');
 
-    // Terminal UI Controls
     const consoleWrapper = document.getElementById('consoleWrapper');
     const toggleTerminalBtn = document.getElementById('toggleTerminalBtn');
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
@@ -27,7 +26,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let isRunning = false;
     let currentInputEl = null;
 
-    // Set Default Java Code
+    // ============================================================
+    // এই ফ্ল্যাগটাই মূল ফিক্স: শেষ যে টেক্সট আউটপুট হয়েছে সেটা newline
+    // (\n) দিয়ে শেষ হয়েছিল কিনা তা ট্র্যাক করে। এর উপর ভিত্তি করেই
+    // ঠিক হবে ইনপুট বক্স "পাশে পাশে" বসবে নাকি "নিচে নিচে" (নতুন লাইনে)।
+    // শুরুতে true রাখা হয়েছে যাতে প্রথম আউটপুট সবসময় নতুন লাইনেই শুরু হয়।
+    // ============================================================
+    let lastOutputEndsWithNewline = true;
+
     if (codeArea) {
         const savedCode = localStorage.getItem('compilehub_java_code');
         codeArea.value = savedCode ? savedCode : defaultJavaCode;
@@ -36,7 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // HTML escape function
     function formatOutputText(text) {
         if (!text) return '';
         return text
@@ -46,10 +51,6 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/\n/g, '<br>')
             .replace(/ /g, '&nbsp;');
     }
-
-    // ==========================================
-    // TERMINAL OUTPUT & INLINE INPUT LOGIC
-    // ==========================================
 
     function appendToConsole(text, color = '#ffffff') {
         if (!consoleOutput || !text) return;
@@ -63,52 +64,79 @@ document.addEventListener('DOMContentLoaded', () => {
         span.style.color = color;
         span.style.display = 'inline';
         span.innerHTML = formatOutputText(text);
-        
+
         consoleOutput.appendChild(span);
         consoleOutput.scrollTop = consoleOutput.scrollHeight;
+
+        // এই আউটপুট টেক্সটটা \n দিয়ে শেষ হয়েছে কিনা — এই অনুযায়ী পরের
+        // ইনপুট বক্স পাশে বসবে নাকি নতুন লাইনে বসবে তা ঠিক হবে
+        lastOutputEndsWithNewline = text.endsWith('\n');
     }
 
-    // ডাইনামিক ইনলাইন ইনপুট ফিল্ড
+    // ============================================================
+    // ইনপুট বক্স — println (newline সহ prompt) হলে নতুন লাইনে বসবে,
+    // print (newline ছাড়া prompt) হলে prompt-এর ঠিক পাশে বসবে।
+    // Enter চাপলে (real terminal-এর মতোই) একটা লাইন-ব্রেক তৈরি হবে।
+    // ============================================================
     function createInlineInputPrompt() {
-        if (!consoleOutput || currentInputEl) return;
+        if (!consoleOutput || currentInputEl || !isRunning) return;
 
         const inputField = document.createElement('input');
         inputField.type = 'text';
         inputField.className = 'inline-input';
-        
-        inputField.style.display = 'inline-block';
-        inputField.style.background = 'transparent';
-        inputField.style.border = 'none';
-        inputField.style.outline = 'none';
-        inputField.style.color = '#ffffff';
-        inputField.style.fontFamily = 'inherit';
-        inputField.style.fontSize = 'inherit';
-        inputField.style.marginLeft = '5px';
+        inputField.autocomplete = 'off';
+
+        if (lastOutputEndsWithNewline) {
+            // আগের prompt println দিয়ে শেষ হয়েছিল → নতুন লাইনে (নিচে নিচে)
+            inputField.style.display = 'block';
+            inputField.style.width = '100%';
+            inputField.style.marginTop = '2px';
+        } else {
+            // আগের prompt print দিয়ে শেষ হয়েছিল (কোনো newline নেই) → পাশে পাশে
+            inputField.style.display = 'inline-block';
+            inputField.style.width = '140px';
+            inputField.style.verticalAlign = 'baseline';
+        }
 
         consoleOutput.appendChild(inputField);
         inputField.focus();
-
         currentInputEl = inputField;
 
         inputField.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 const value = inputField.value;
-                
+
+                // টাইপ করা মান inline span আকারে বসানো হচ্ছে, যাতে এটা
+                // prompt-এর ঠিক পাশে/জায়গায় বসে (block দিয়ে জোর করে
+                // নতুন লাইনে ঠেলে দেওয়া হচ্ছে না)
                 const textSpan = document.createElement('span');
                 textSpan.style.color = '#ffffff';
-                textSpan.innerHTML = formatOutputText(value) + '<br>';
-                
+                textSpan.style.display = 'inline';
+                textSpan.innerHTML = formatOutputText(value);
+
                 inputField.replaceWith(textSpan);
                 currentInputEl = null;
 
+                // Enter চাপাটাই বাস্তব terminal-এ একটা newline তৈরি করে —
+                // তাই এখানে একটা সত্যিকারের line-break যোগ করা হচ্ছে,
+                // এবং ফ্ল্যাগ true করে দেওয়া হচ্ছে
+                consoleOutput.appendChild(document.createElement('br'));
+                lastOutputEndsWithNewline = true;
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+
                 if (socket && socket.readyState === WebSocket.OPEN && isRunning) {
                     socket.send(JSON.stringify({ type: 'input', data: value + '\n' }));
+                }
+
+                // পরের ইনপুট লাগতে পারে ধরে নিয়ে সাথে সাথেই আবার বক্স রেডি
+                // রাখা হচ্ছে, backend output-এর অপেক্ষা না করে
+                if (isRunning) {
+                    setTimeout(createInlineInputPrompt, 30);
                 }
             }
         });
     }
 
-    // Update Line Numbers
     function updateLineNumbers() {
         if (!codeArea || !lineNumbers) return;
         const lines = codeArea.value.split('\n').length;
@@ -126,7 +154,6 @@ document.addEventListener('DOMContentLoaded', () => {
         codeArea.addEventListener('input', updateLineNumbers);
     }
 
-    // Language Selection
     if (languageSelect) {
         languageSelect.addEventListener('change', () => {
             const selectedLang = languageSelect.value;
@@ -142,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         socket = new WebSocket(WS_URL);
 
-      socket.addEventListener('message', (event) => {
+        socket.addEventListener('message', (event) => {
             let msg;
             try {
                 msg = JSON.parse(event.data);
@@ -152,13 +179,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (msg.type === 'output') {
                 appendToConsole(msg.data, '#ffffff');
-                // আউটপুট আসার পর প্রোগ্রাম রানিং থাকলে ইনপুট ফিল্ড তৈরি করবে
                 if (isRunning) {
                     createInlineInputPrompt();
                 }
             } else if (msg.type === 'error') {
                 appendToConsole(msg.data, '#e74c3c');
-            }  else if (msg.type === 'exit') {
+            } else if (msg.type === 'exit') {
                 isRunning = false;
 
                 if (currentInputEl) {
@@ -166,18 +192,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentInputEl = null;
                 }
 
-                // এক্সিট মেসেজের div
+                if (!lastOutputEndsWithNewline) {
+                    consoleOutput.appendChild(document.createElement('br'));
+                }
+
                 const exitLine = document.createElement('div');
                 exitLine.style.margin = '0';
                 exitLine.style.padding = '0';
-                exitLine.style.lineHeight = '1'; // লাইন হাইট কম করে সংকুচিত করা হলো
-                
+                exitLine.style.lineHeight = '1';
+
                 const codeVal = (msg.code !== null && msg.code !== undefined) ? msg.code : 0;
-                
+
                 exitLine.innerHTML = `<span style="color: #ffffff; font-weight: bold; margin-right: 6px;">></span><span style="color: #ffffff;">Process exited with code ${codeVal}.</span>`;
-                
+
                 consoleOutput.appendChild(exitLine);
                 consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                lastOutputEndsWithNewline = true;
             }
         });
 
@@ -192,7 +222,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return socket;
     }
 
-    // Run Button
     if (runBtn) {
         runBtn.addEventListener('click', () => {
             if (consoleWrapper) {
@@ -201,6 +230,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (consoleOutput) {
                 consoleOutput.innerHTML = '';
             }
+
+            lastOutputEndsWithNewline = true;
 
             const code = codeArea ? codeArea.value : '';
             const ws = ensureSocket();
@@ -218,7 +249,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Debug Button
     if (debugBtn) {
         debugBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -227,7 +257,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Stop Button
     if (stopBtn) {
         stopBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -238,7 +267,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Share Button
     if (shareBtn) {
         shareBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -247,7 +275,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Save Button
     if (saveBtn) {
         saveBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -261,7 +288,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Terminal Shortcuts & Toggle
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === '`') {
             e.preventDefault();
@@ -285,4 +311,46 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     updateLineNumbers();
+
+    // ============================================================
+    // TERMINAL RESIZE DRAG (আগের ফিক্স অপরিবর্তিত)
+    // ============================================================
+    const resizeHandle = document.getElementById('consoleResizeHandle');
+
+    if (resizeHandle && consoleWrapper) {
+        let isResizing = false;
+        let startY = 0;
+        let startHeight = 0;
+
+        resizeHandle.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            isResizing = true;
+            startY = e.clientY;
+            startHeight = consoleWrapper.getBoundingClientRect().height;
+            consoleWrapper.classList.add('resizing');
+            document.body.style.cursor = 'ns-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', function (e) {
+            if (!isResizing) return;
+
+            const dy = startY - e.clientY;
+            let newHeight = startHeight + dy;
+            const maxHeight = window.innerHeight * 0.7;
+            const minHeight = 60;
+
+            newHeight = Math.min(Math.max(newHeight, minHeight), maxHeight);
+            consoleWrapper.style.height = `${newHeight}px`;
+        });
+
+        document.addEventListener('mouseup', function () {
+            if (isResizing) {
+                isResizing = false;
+                consoleWrapper.classList.remove('resizing');
+                document.body.style.cursor = 'default';
+                document.body.style.userSelect = 'auto';
+            }
+        });
+    }
 });
