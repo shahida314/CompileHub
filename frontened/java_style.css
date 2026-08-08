@@ -80,7 +80,7 @@ body {
     flex: 1;
     background-color: #1e1e1e;
     overflow: hidden;
-    min-height: 0; /* flex shrink ঠিকমতো কাজ করার জন্য */
+    min-height: 0; 
 }
 
 .line-numbers {
@@ -112,7 +112,7 @@ body {
     tab-size: 4;
 }
 
-/* ---- TERMINAL WRAPPER: position: relative যোগ করা হয়েছে (drag handle ঠিক জায়গায় বসার জন্য) ---- */
+
 .console-wrapper {
     position: relative;
     background-color: #000000;
@@ -160,7 +160,7 @@ body {
     caret-color: #ffffff;
 }
 
-/* ---- RESIZE HANDLE: একটাই সংজ্ঞা, আগের দুইটা duplicate রুল মুছে দেওয়া হয়েছে ---- */
+
 .console-resize-handle {
     position: absolute;
     top: -4px;

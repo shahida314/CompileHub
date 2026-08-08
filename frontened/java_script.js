@@ -1,4 +1,4 @@
-// Java Default Template
+
 const defaultJavaCode = `public class Main {
     public static void main(String[] args) {
         System.out.println("Hello World");
@@ -26,18 +26,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let isRunning = false;
     let currentInputEl = null;
 
-    // ============================================================
-    // এই ফ্ল্যাগটাই মূল ফিক্স: শেষ যে টেক্সট আউটপুট হয়েছে সেটা newline
-    // (\n) দিয়ে শেষ হয়েছিল কিনা তা ট্র্যাক করে। এর উপর ভিত্তি করেই
-    // ঠিক হবে ইনপুট বক্স "পাশে পাশে" বসবে নাকি "নিচে নিচে" (নতুন লাইনে)।
-    // শুরুতে true রাখা হয়েছে যাতে প্রথম আউটপুট সবসময় নতুন লাইনেই শুরু হয়।
-    // ============================================================
+    
     let lastOutputEndsWithNewline = true;
 
-    // ============================================================
-    // NEW: পেজ লোড হওয়ার সাথে সাথেই টার্মিনালে initial message
-    // দেখানো হবে (Run চাপার আগেই) — python_ui.html-এর মতো
-    // ============================================================
+    
     if (consoleOutput) {
         const initLine = document.createElement('div');
         initLine.style.margin = '0';
@@ -81,16 +73,11 @@ document.addEventListener('DOMContentLoaded', () => {
         consoleOutput.appendChild(span);
         consoleOutput.scrollTop = consoleOutput.scrollHeight;
 
-        // এই আউটপুট টেক্সটটা \n দিয়ে শেষ হয়েছে কিনা — এই অনুযায়ী পরের
-        // ইনপুট বক্স পাশে বসবে নাকি নতুন লাইনে বসবে তা ঠিক হবে
+        
         lastOutputEndsWithNewline = text.endsWith('\n');
     }
 
-    // ============================================================
-    // ইনপুট বক্স — println (newline সহ prompt) হলে নতুন লাইনে বসবে,
-    // print (newline ছাড়া prompt) হলে prompt-এর ঠিক পাশে বসবে।
-    // Enter চাপলে (real terminal-এর মতোই) একটা লাইন-ব্রেক তৈরি হবে।
-    // ============================================================
+  
     function createInlineInputPrompt() {
         if (!consoleOutput || currentInputEl || !isRunning) return;
 
@@ -100,12 +87,12 @@ document.addEventListener('DOMContentLoaded', () => {
         inputField.autocomplete = 'off';
 
         if (lastOutputEndsWithNewline) {
-            // আগের prompt println দিয়ে শেষ হয়েছিল → নতুন লাইনে (নিচে নিচে)
+            
             inputField.style.display = 'block';
             inputField.style.width = '100%';
             inputField.style.marginTop = '2px';
         } else {
-            // আগের prompt print দিয়ে শেষ হয়েছিল (কোনো newline নেই) → পাশে পাশে
+            
             inputField.style.display = 'inline-block';
             inputField.style.width = '140px';
             inputField.style.verticalAlign = 'baseline';
@@ -119,9 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key === 'Enter') {
                 const value = inputField.value;
 
-                // টাইপ করা মান inline span আকারে বসানো হচ্ছে, যাতে এটা
-                // prompt-এর ঠিক পাশে/জায়গায় বসে (block দিয়ে জোর করে
-                // নতুন লাইনে ঠেলে দেওয়া হচ্ছে না)
+                
                 const textSpan = document.createElement('span');
                 textSpan.style.color = '#ffffff';
                 textSpan.style.display = 'inline';
@@ -130,9 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 inputField.replaceWith(textSpan);
                 currentInputEl = null;
 
-                // Enter চাপাটাই বাস্তব terminal-এ একটা newline তৈরি করে —
-                // তাই এখানে একটা সত্যিকারের line-break যোগ করা হচ্ছে,
-                // এবং ফ্ল্যাগ true করে দেওয়া হচ্ছে
+                
                 consoleOutput.appendChild(document.createElement('br'));
                 lastOutputEndsWithNewline = true;
                 consoleOutput.scrollTop = consoleOutput.scrollHeight;
@@ -141,8 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     socket.send(JSON.stringify({ type: 'input', data: value + '\n' }));
                 }
 
-                // পরের ইনপুট লাগতে পারে ধরে নিয়ে সাথে সাথেই আবার বক্স রেডি
-                // রাখা হচ্ছে, backend output-এর অপেক্ষা না করে
+                
                 if (isRunning) {
                     setTimeout(createInlineInputPrompt, 30);
                 }
@@ -325,9 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     updateLineNumbers();
 
-    // ============================================================
-    // TERMINAL RESIZE DRAG (আগের ফিক্স অপরিবর্তিত)
-    // ============================================================
+    
     const resizeHandle = document.getElementById('consoleResizeHandle');
 
     if (resizeHandle && consoleWrapper) {

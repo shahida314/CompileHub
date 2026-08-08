@@ -63,7 +63,7 @@ Symbol* lookup_symbol(const char *name) {
     return NULL;
 }
 
-/* ---- Function registry (for optional function-call bonus feature) ---- */
+
 
 typedef struct Function {
     char name[50];

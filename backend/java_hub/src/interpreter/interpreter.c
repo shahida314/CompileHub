@@ -40,11 +40,7 @@ static int runtime_var_count = 0;
 static int returning = 0;
 static double return_value = 0;
 
-// ---------------- STRING CONCAT BUFFER POOL ----------------
-// "text" + variable + variable ... এই ধরনের concatenation-এর জন্য
-// rotating static buffer pool। নেস্টেড concatenation (a+b+c) হলেও
-// প্রতিটা কল আলাদা buffer পায়, একটা আরেকটাকে overwrite করে না
-// (যতক্ষণ না nesting depth ১৬-এর বেশি হয়, যা সাধারণ প্রোগ্রামে হয় না)
+
 #define STR_POOL_COUNT 16
 #define STR_POOL_SIZE  512
 static char str_buf_pool[STR_POOL_COUNT][STR_POOL_SIZE];
@@ -56,9 +52,7 @@ static char* next_concat_buf(void) {
     b[0] = '\0';
     return b;
 }
-// -------------------------------------------------------------
 
-// ---------------- FORWARD DECLARATIONS ----------------
 double eval_expr_rt(ASTNode *node);
 int is_string_node(ASTNode *node);
 const char* get_expr_string(ASTNode *node);
@@ -66,7 +60,7 @@ const char* node_to_string(ASTNode *node);
 double call_function(const char *name, ASTNode *args);
 void exec_stmt_list_rt(ASTNode *node);
 void exec_stmt_rt(ASTNode *node);
-// --------------------------------------------------------
+
 
 void set_runtime_var(const char *name, double value) {
     for (int i = 0; i < runtime_var_count; i++) {
@@ -144,7 +138,7 @@ const char* get_runtime_var_str(const char *name) {
     return "";
 }
 
-// ---------------- INPUT FUNCTIONS ----------------
+
 
 double scanner_read_number(void) {
     double v = 0;
@@ -181,7 +175,7 @@ const char* scanner_read_token(void) {
     if (scanf(" %255s", buf) != 1) buf[0] = '\0';
     return buf;
 }
-// ---------------------------------------------------------
+
 
 int is_string_node(ASTNode *node) {
     if (!node) return 0;
@@ -193,15 +187,14 @@ int is_string_node(ASTNode *node) {
         (strcmp(node->value, "nextLine") == 0 || strcmp(node->value, "next") == 0)) {
         return 1;
     }
-    // "+" দিয়ে যদি কোনো একপাশ String হয়, তাহলে পুরো expression-ই string concatenation
+   
     if (node->type == NODE_BINOP && strcmp(node->value, "+") == 0) {
         return is_string_node(node->left) || is_string_node(node->right);
     }
     return 0;
 }
 
-// যেকোনো নোডকে (string/int/float/bool) স্ট্রিং হিসেবে রূপান্তর করে —
-// concatenation-এ ব্যবহারের জন্য
+
 const char* node_to_string(ASTNode *node) {
     if (!node) return "";
 

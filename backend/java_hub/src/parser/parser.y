@@ -79,9 +79,7 @@ member_list:
         }
     ;
 
-/* main_method আলাদা rule হিসেবে আর নেই — এখন main এবং অন্য যেকোনো ফাংশন
-   একই func_decl rule দিয়ে ধরা পড়ে। এটাই আগের VOID-সম্পর্কিত
-   shift/reduce conflict সম্পূর্ণ দূর করে দেয়। */
+
 member:
       func_decl     { $$ = $1; }
     ;

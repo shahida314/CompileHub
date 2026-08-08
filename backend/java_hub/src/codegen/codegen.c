@@ -54,7 +54,7 @@ void gen_stmt(ASTNode *node) {
 
     switch (node->type) {
         case NODE_DECL:
-            // Declarations don't produce TAC by themselves
+            
             break;
 
         case NODE_ASSIGN:
