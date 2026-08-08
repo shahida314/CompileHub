@@ -34,6 +34,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================================================
     let lastOutputEndsWithNewline = true;
 
+    // ============================================================
+    // NEW: পেজ লোড হওয়ার সাথে সাথেই টার্মিনালে initial message
+    // দেখানো হবে (Run চাপার আগেই) — python_ui.html-এর মতো
+    // ============================================================
+    if (consoleOutput) {
+        const initLine = document.createElement('div');
+        initLine.style.margin = '0';
+        initLine.style.padding = '0';
+        initLine.style.lineHeight = '1.2';
+        initLine.innerHTML = '<span style="color: #ffffff; font-weight: bold; margin-right: 6px;">&gt;</span><span style="color: #27ae60;">Initializing Java Console...</span>';
+        consoleOutput.appendChild(initLine);
+    }
+
     if (codeArea) {
         const savedCode = localStorage.getItem('compilehub_java_code');
         codeArea.value = savedCode ? savedCode : defaultJavaCode;

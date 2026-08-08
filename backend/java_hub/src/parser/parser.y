@@ -43,6 +43,7 @@ ASTNode *root = NULL;
 %type <node> param_list param_list_opt param
 %type <node> stmt_list stmt block decl_stmt assign_stmt if_stmt while_stmt func_stmt for_stmt
 %type <node> for_init for_update scanner_decl
+%type <node> decl_item decl_id_list
 %type <node> print_stmt println_stmt return_stmt call_stmt
 %type <node> expr expr_list expr_list_opt
 %type <str_val> type_spec
@@ -119,10 +120,7 @@ param_list:
         }
     ;
 
-/* সাধারণ parameter (int x, float y, String s, ...) এবং main-এর বিশেষ
-   "String[] args" প্যাটার্ন — দুটোই এখন এই একই param rule দিয়ে ধরা পড়ে।
-   STRING_TYPE-এর পরে LBRACKET এলে array-ফর্ম, IDENTIFIER এলে সাধারণ param —
-   এই দুই লুকঅ্যাহেড টোকেন ভিন্ন হওয়ায় parser-এর কোনো conflict হয় না। */
+
 param:
       type_spec IDENTIFIER {
             ASTNode *n = create_node(NODE_DECL, $2, NULL, NULL);
@@ -170,19 +168,43 @@ stmt:
         }
     ;
 
-decl_stmt:
-      type_spec IDENTIFIER SEMICOLON {
-            ASTNode *n = create_node(NODE_DECL, $2, NULL, NULL);
-            strcpy(n->data_type, $1);
-            $$ = n;
+
+decl_item:
+      IDENTIFIER {
+            $$ = create_node(NODE_DECL, $1, NULL, NULL);
         }
-    | type_spec IDENTIFIER ASSIGN expr SEMICOLON {
-            ASTNode *decl = create_node(NODE_DECL, $2, NULL, NULL);
-            strcpy(decl->data_type, $1);
-            ASTNode *var = create_node(NODE_VAR, $2, NULL, NULL);
-            ASTNode *asg = create_node(NODE_ASSIGN, $2, var, $4);
+    | IDENTIFIER ASSIGN expr {
+            ASTNode *decl = create_node(NODE_DECL, $1, NULL, NULL);
+            ASTNode *var = create_node(NODE_VAR, $1, NULL, NULL);
+            ASTNode *asg = create_node(NODE_ASSIGN, $1, var, $3);
             decl->next = asg;
             $$ = decl;
+        }
+    ;
+
+decl_id_list:
+      decl_item {
+            $$ = $1;
+        }
+    | decl_id_list COMMA decl_item {
+            ASTNode *n = $1;
+            while (n->next) n = n->next;
+            n->next = $3;
+            $$ = $1;
+        }
+    ;
+
+decl_stmt:
+      type_spec decl_id_list SEMICOLON {
+            
+            ASTNode *n = $2;
+            while (n) {
+                if (n->type == NODE_DECL) {
+                    strcpy(n->data_type, $1);
+                }
+                n = n->next;
+            }
+            $$ = $2;
         }
     ;
 
