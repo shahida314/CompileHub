@@ -4,38 +4,111 @@ const path = require('path');
 const http = require('http');
 const WebSocket = require('ws');
 
-// Language Runners Import
-const { runCCode } = require('./c_hub/c_runner');
-const { runCppCode } = require('./cpp_hub/cpp_runner'); 
-const { runJavaCompiler } = require('./java_hub/java_runner');
-const { runPythonInteractive } = require('./python_hub/python_runner');
+// C, C++, Java, Python Runner Imports
+const { runCCode, runCInteractive } = require('./c_hub/c_runner');
+const { runCppCode, runCppInteractive } = require('./cpp_hub/cpp_runner');
+const { runJavaCompiler, runJavaCompilerInteractive } = require('./java_hub/java_runner');
+const { runPythonCode, runPythonInteractive } = require('./python_hub/python_runner');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // Serve frontend static files
-app.use(express.static(path.join(__dirname, '../frontend')));
+app.use(express.static(path.join(__dirname, '../frontened')));
 
-// Create HTTP and WebSocket server for Real-time Python
+// Create HTTP and WebSocket server
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Handle WebSocket connection for real-time Python input/output
+// WebSocket Server for All Interactive Languages (C, C++, Java, Python)
 wss.on('connection', (ws) => {
+    let currentChild = null;
+
     ws.on('message', (message) => {
+        let msg;
         try {
-            const data = JSON.parse(message);
-            if (data.type === 'start') {
-                runPythonInteractive(ws, data.code);
+            msg = JSON.parse(message);
+        } catch (e) {
+            return;
+        }
+
+        // Python Interactive Session
+        if (msg.type === 'start') {
+            if (currentChild) {
+                try { currentChild.kill(); } catch (e) { }
+                currentChild = null;
             }
-        } catch (err) {
-            ws.send(JSON.stringify({ type: 'error', data: 'Invalid JSON payload' }));
+            runPythonInteractive(ws, msg.code);
+        }
+        // C Interactive Session
+        else if (msg.type === 'start_c') {
+            if (currentChild) {
+                try { currentChild.kill(); } catch (e) { }
+                currentChild = null;
+            }
+            currentChild = runCInteractive(ws, msg.code);
+        }
+        // C++ Interactive Session
+        else if (msg.type === 'start_cpp') {
+            if (currentChild) {
+                try { currentChild.kill(); } catch (e) { }
+                currentChild = null;
+            }
+            currentChild = runCppInteractive(ws, msg.code);
+        }
+
+        // Java Interactive Execution Logic
+        if (msg.type === 'run') {
+            if (currentChild) {
+                try { currentChild.kill(); } catch (e) { }
+                currentChild = null;
+            }
+
+            currentChild = runJavaCompilerInteractive(msg.code, {
+                onOutput: (data) => {
+                    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'output', data }));
+                },
+                onError: (data) => {
+                    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'error', data }));
+                },
+                onExit: (code) => {
+                    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'exit', code }));
+                    currentChild = null;
+                }
+            });
+        }
+
+        // Handle User Input in Terminal (scanf/cin/input)
+        if (msg.type === 'input') {
+            if (currentChild && currentChild.stdin && currentChild.stdin.writable) {
+                currentChild.stdin.write(msg.data + '\n');
+            }
+        }
+
+        // Handle Stop Execution
+        if (msg.type === 'stop') {
+            if (currentChild) {
+                try { currentChild.kill(); } catch (e) { }
+                currentChild = null;
+                if (ws.readyState === ws.OPEN) {
+                    ws.send(JSON.stringify({ type: 'exit', code: null, stopped: true }));
+                }
+            }
+        }
+    });
+
+    ws.on('close', () => {
+        if (currentChild) {
+            try { currentChild.kill(); } catch (e) { }
+            currentChild = null;
         }
     });
 });
 
-// C Compiler API Endpoint
+// ================= API ENDPOINTS ================= //
+
+// C Compiler API Endpoint (Non-interactive fallback)
 app.post('/api/compile/c', (req, res) => {
     const { code, input } = req.body;
     runCCode(code, input || '', (result) => {
@@ -43,7 +116,7 @@ app.post('/api/compile/c', (req, res) => {
     });
 });
 
-// Generic /run Endpoint & C++ Endpoint (যাতে /run এবং /api/compile/cpp দুটোতেই কাজ করে)
+// Generic /run Endpoint & C++ Endpoint
 const handleCppExecution = (req, res) => {
     const { code, input } = req.body;
 
@@ -73,21 +146,34 @@ app.post('/api/compile/cpp', handleCppExecution);
 
 // Java Code Execution Endpoint
 app.post('/api/compile/java', (req, res) => {
-    const { code, input } = req.body;
+    const { code } = req.body;
 
     if (!code) {
         return res.status(400).json({ error: 'No code provided' });
     }
 
-    runJavaCompiler(code, input || '', (output) => {
+    runJavaCompiler(code, (output) => {
         if (!res.headersSent) {
             res.json({ output });
         }
     });
 });
 
+// Python Compiler API Endpoint
+app.post('/api/compile/python', (req, res) => {
+    const { code } = req.body;
+
+    if (!code) {
+        return res.status(400).json({ error: 'No code provided' });
+    }
+
+    runPythonCode(code, (result) => {
+        if (!res.headersSent) res.json(result);
+    });
+});
+
 // Start Server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-    console.log(`CompileHub Backend Server running on port ${PORT}`);
+    console.log(`CompileHub Backend Server (HTTP + WS) running on port ${PORT}`);
 });

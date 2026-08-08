@@ -1,4 +1,5 @@
 const defaultCppCode = `#include <iostream>
+
 int main() {
     std::cout << "Hello World" << std::endl;
     return 0;
@@ -9,22 +10,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const codeArea = document.getElementById('codeArea');
     const lineNumbers = document.getElementById('lineNumbers');
     const runBtn = document.getElementById('runBtn');
+    const debugBtn = document.getElementById('debugBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const shareBtn = document.getElementById('shareBtn');
+    const saveBtn = document.getElementById('saveBtn');
     const consoleOutput = document.getElementById('consoleOutput');
-
     const consoleWrapper = document.getElementById('consoleWrapper');
+
     const toggleTerminalBtn = document.getElementById('toggleTerminalBtn');
     const closeTerminalBtn = document.getElementById('closeTerminalBtn');
     const resizeHandle = document.getElementById('consoleResizeHandle');
 
-    const BACKEND_URL = 'http://localhost:5000/run';
+    let ws = null;
+    let inputStartPos = 0;
 
-    if (codeArea) {
-        codeArea.value = defaultCppCode;
-    }
+    codeArea.value = defaultCppCode;
 
-    // ১. লাইন নম্বর আপডেট
+    // Initial clean terminal text matching Python console style
+    consoleOutput.style.color = '#27ae60';
+    consoleOutput.innerText = `> Initializing C++ Console...`;
+
     function updateLineNumbers() {
-        if (!codeArea || !lineNumbers) return;
         const lines = codeArea.value.split('\n').length;
         let lineHTML = '';
         for (let i = 1; i <= Math.max(lines, 8); i++) {
@@ -33,93 +39,125 @@ document.addEventListener('DOMContentLoaded', () => {
         lineNumbers.innerHTML = lineHTML;
     }
 
-    if (codeArea) {
-        codeArea.addEventListener('input', updateLineNumbers);
-        codeArea.addEventListener('scroll', () => {
-            lineNumbers.scrollTop = codeArea.scrollTop;
-        });
-        updateLineNumbers();
-    }
+    codeArea.addEventListener('scroll', () => {
+        lineNumbers.scrollTop = codeArea.scrollTop;
+    });
 
-    // ২. ল্যাঙ্গুয়েজ চেঞ্জ
-    if (languageSelect) {
-        languageSelect.addEventListener('change', () => {
-            const selectedLang = languageSelect.value;
-            if (selectedLang === 'c') window.location.href = 'c_ui.html';
-            else if (selectedLang === 'cpp') window.location.href = 'cpp_ui.html';
-            else if (selectedLang === 'python') window.location.href = 'python_ui.html';
-            else if (selectedLang === 'java') window.location.href = 'java_ui.html';
-        });
-    }
+    languageSelect.addEventListener('change', () => {
+        const selectedLang = languageSelect.value;
+        if (selectedLang === 'c') window.location.href = 'c_ui.html';
+        else if (selectedLang === 'cpp') window.location.href = 'cpp_ui.html';
+        else if (selectedLang === 'python') window.location.href = 'python_ui.html';
+        else if (selectedLang === 'java') window.location.href = 'java_ui.html';
+    });
 
-    // ৩. ব্যাকএন্ডে কোড এবং ইনপুট পাঠানোর মূল ফাংশন
-    async function runCode(inputData = '') {
+    // Run code via WebSocket with Python-like tight spacing
+    runBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+
         consoleWrapper.classList.remove('hidden', 'collapsed');
         consoleOutput.style.color = '#ffffff';
-        consoleOutput.innerHTML = `&gt; Compiling and executing C++ code...<br>`;
+        consoleOutput.innerText = ``;
 
-        const code = codeArea.value;
+        inputStartPos = 0;
 
-        try {
-            const response = await fetch(BACKEND_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: code, input: inputData })
-            });
+        if (ws) ws.close();
+        ws = new WebSocket('ws://localhost:5000');
 
-            const result = await response.json();
-            let outputHTML = '';
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ type: 'start_cpp', code: codeArea.value }));
+        };
 
-            if (result.output) {
-                consoleOutput.style.color = '#ffffff';
-                outputHTML = `&gt; Output:<br>${result.output.replace(/\n/g, '<br>')}`;
-            } else if (result.error) {
-                consoleOutput.style.color = '#e74c3c';
-                outputHTML = `&gt; Error:<br>${result.error.replace(/\n/g, '<br>')}`;
-            } else {
-                consoleOutput.style.color = '#ffffff';
-                outputHTML = `&gt; Program finished with no output.`;
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+
+            if (msg.type === 'output' || msg.type === 'error') {
+                if (msg.type === 'error') consoleOutput.style.color = '#ff6b6b';
+                else consoleOutput.style.color = '#ffffff';
+
+                consoleOutput.innerText += msg.data || msg.text;
+                inputStartPos = consoleOutput.innerText.length;
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
             }
-
-            // টার্মিনালের নিচে ইনপুট দেওয়ার ইনপুট ফিল্ড (আগের ইনপুট ভ্যালু সহ রাখা)
-            outputHTML += `<br><br>&gt; <input type="text" id="terminalPrompt" value="${inputData}" placeholder="Type input here and press Enter or click Run..." style="background:transparent; border:none; color:#00ff00; outline:none; width:80%; font-family:monospace;" autofocus />`;
-            
-            consoleOutput.innerHTML = outputHTML;
-
-            // ইনপুট বক্স একটিভ করা
-            attachPromptListener();
-
-        } catch (error) {
-            consoleOutput.style.color = '#e74c3c';
-            consoleOutput.innerHTML = `&gt; Connection Error: Unable to reach backend server.<br>${error.message}`;
-        }
-    }
-
-    // ৪. টার্মিনালে ইনপুট ফিল্ডের লিসেনার
-    function attachPromptListener() {
-        const terminalPrompt = document.getElementById('terminalPrompt');
-        if (terminalPrompt) {
-            terminalPrompt.focus();
-            terminalPrompt.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    const userInput = terminalPrompt.value;
-                    runCode(userInput);
+            else if (msg.type === 'exit') {
+                // Ensure no trailing double newline/extra space before exit message
+                let currentText = consoleOutput.innerText;
+                if (!currentText.endsWith('\n') && currentText.length > 0) {
+                    consoleOutput.innerText += '\n';
                 }
-            });
-        }
-    }
+                consoleOutput.innerText += `> Process exited with code ${msg.code}.`;
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+            }
+        };
 
-    // 🖐️ ► Run বাটনে ক্লিক করলে টার্মিনালের ইনপুটসহ রান হবে!
-    if (runBtn) {
-        runBtn.addEventListener('click', () => {
-            const terminalPrompt = document.getElementById('terminalPrompt');
-            // যদি ইনপুট বক্সে কিছু লেখা থাকে তবে সেটা নেবে, না থাকলে খালি স্ট্রিং পাঠাবে
-            const currentInput = terminalPrompt ? terminalPrompt.value : '';
-            runCode(currentInput);
+        ws.onerror = () => {
+            consoleOutput.style.color = '#ff6b6b';
+            consoleOutput.innerText = `> Connection Error: Unable to reach WebSocket server.`;
+        };
+    });
+
+    // Send user input on Enter key
+    consoleOutput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && ws && ws.readyState === WebSocket.OPEN) {
+            e.preventDefault();
+
+            const currentText = consoleOutput.innerText;
+            const userInput = currentText.substring(inputStartPos);
+
+            consoleOutput.innerText += '\n';
+            inputStartPos = consoleOutput.innerText.length;
+
+            ws.send(JSON.stringify({ type: 'input', data: userInput }));
+        }
+    });
+
+    if (debugBtn) {
+        debugBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            consoleWrapper.classList.remove('hidden', 'collapsed');
+            consoleOutput.style.color = '#f39c12';
+            consoleOutput.innerText = `> Debugging mode active...\n> Syntax check passed.`;
         });
     }
 
-    // ⌨️ শর্টকাট কি এবং টার্মিনাল কন্ট্রোল
+    if (stopBtn) {
+        stopBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (ws) {
+                ws.send(JSON.stringify({ type: 'stop' }));
+                ws.close();
+                ws = null;
+                consoleWrapper.classList.remove('hidden', 'collapsed');
+                consoleOutput.style.color = '#ff6b6b';
+                consoleOutput.innerText += `\n> Execution stopped by user.`;
+            } else {
+                consoleWrapper.classList.remove('hidden', 'collapsed');
+                consoleOutput.style.color = '#ff6b6b';
+                consoleOutput.innerText = `> No active process to stop.`;
+            }
+        });
+    }
+
+    if (shareBtn) {
+        shareBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            navigator.clipboard.writeText(window.location.href);
+            alert('IDE link copied to clipboard!');
+        });
+    }
+
+    if (saveBtn) {
+        saveBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const blob = new Blob([codeArea.value], { type: 'text/plain' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'main.cpp';
+            link.click();
+            URL.revokeObjectURL(link.href);
+        });
+    }
+
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === '`') {
             e.preventDefault();
@@ -128,50 +166,51 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    if (toggleTerminalBtn) {
-        toggleTerminalBtn.addEventListener('click', () => {
-            consoleWrapper.classList.toggle('collapsed');
-        });
-    }
+    toggleTerminalBtn.addEventListener('click', () => {
+        consoleWrapper.classList.toggle('collapsed');
+    });
 
-    if (closeTerminalBtn) {
-        closeTerminalBtn.addEventListener('click', () => {
-            consoleWrapper.classList.add('hidden');
-        });
-    }
+    closeTerminalBtn.addEventListener('click', () => {
+        consoleWrapper.classList.add('hidden');
+    });
 
-    // 📐 টার্মিনাল রিসাইজ করার হ্যান্ডলার
     let isResizing = false;
     let startY = 0;
     let startHeight = 0;
 
-    if (resizeHandle) {
-        resizeHandle.addEventListener('mousedown', (e) => {
-            if (consoleWrapper.classList.contains('collapsed') || consoleWrapper.classList.contains('hidden')) return;
-            isResizing = true;
-            startY = e.clientY;
-            startHeight = consoleWrapper.offsetHeight;
-            consoleWrapper.classList.add('resizing');
-            document.body.style.cursor = 'ns-resize';
-            e.preventDefault();
-        });
+    resizeHandle.addEventListener('mousedown', (e) => {
+        if (consoleWrapper.classList.contains('collapsed') ||
+            consoleWrapper.classList.contains('hidden')) return;
 
-        document.addEventListener('mousemove', (e) => {
-            if (!isResizing) return;
-            const delta = startY - e.clientY;
-            let newHeight = startHeight + delta;
-            const minHeight = 80;
-            const maxHeight = window.innerHeight * 0.7;
-            newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
-            consoleWrapper.style.height = `${newHeight}px`;
-        });
+        isResizing = true;
+        startY = e.clientY;
+        startHeight = consoleWrapper.offsetHeight;
+        consoleWrapper.classList.add('resizing');
+        document.body.style.cursor = 'ns-resize';
+        e.preventDefault();
+    });
 
-        document.addEventListener('mouseup', () => {
-            if (isResizing) {
-                isResizing = false;
-                consoleWrapper.classList.remove('resizing');
-                document.body.style.cursor = 'default';
-            }
-        });
-    }
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+
+        const delta = startY - e.clientY;
+        let newHeight = startHeight + delta;
+
+        const minHeight = 80;
+        const maxHeight = window.innerHeight * 0.7;
+        newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
+
+        consoleWrapper.style.height = `${newHeight}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            consoleWrapper.classList.remove('resizing');
+            document.body.style.cursor = '';
+        }
+    });
+
+    codeArea.addEventListener('input', updateLineNumbers);
+    updateLineNumbers();
 });

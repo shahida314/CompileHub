@@ -16,7 +16,7 @@
             <span class="brand-title">CompileHub</span>
         </div>
 
-        <!-- Actions -->
+        <!-- Header Actions and Controls -->
         <div class="header-controls">
             <button class="btn btn-run" id="runBtn">► Run</button>
             <button class="btn" id="debugBtn">Debug</button>
@@ -40,7 +40,7 @@
         <textarea id="codeArea" class="code-area" spellcheck="false"></textarea>
     </main>
 
-    <!-- Terminal (Interactive Output & Input) -->
+    <!-- Terminal (Interactive Output & Input Support via WebSocket) -->
     <footer class="console-wrapper" id="consoleWrapper">
         <!-- Drag handle to resize terminal height -->
         <div class="console-resize-handle" id="consoleResizeHandle"></div>
@@ -52,13 +52,14 @@
                 <button class="console-btn" id="closeTerminalBtn" title="Close Panel">✕</button>
             </div>
         </div>
-        
+
         <!-- Interactive Terminal Console -->
         <div class="console-container" id="consoleOutput" contenteditable="true" spellcheck="false">
-            &gt; Initializing console...
+            &gt; Initializing interactive terminal...
         </div>
     </footer>
 
+    <!-- Frontend Script handling WebSocket communication for C, C++, Java, and Python -->
     <script src="cpp_script.js"></script>
 </body>
 

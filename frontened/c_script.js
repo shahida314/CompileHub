@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateLineNumbers();
 
     consoleOutput.style.color = '#27ae60';
-    consoleOutput.innerText = `> Ready to compile and run C code...`;
+    consoleOutput.innerText = `> Initializing C Console...`;
 
     // Update editor line numbers
     function updateLineNumbers() {
@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         consoleWrapper.classList.remove('hidden', 'collapsed');
         consoleOutput.style.color = '#ffffff';
-        consoleOutput.innerText = ``; // অতিরিক্ত লেখা মুছে ফেলা হয়েছে
+        consoleOutput.innerText = ``;
         inputStartPos = consoleOutput.innerText.length;
 
         if (currentWebSocket) {
